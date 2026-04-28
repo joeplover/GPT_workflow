@@ -1,0 +1,243 @@
+[
+  {
+    "id": "88f6e093aec74d57914721d3edacd8fa",
+    "name": "项目 1",
+    "synopsis": "",
+    "created_at": "2026-04-28T21:08:55",
+    "updated_at": "2026-04-28T23:35:07",
+    "shots": [
+      {
+        "id": "e1ab6b8d968e43ad8af71ae8ee0313fc",
+        "shot_number": 1,
+        "mode": "reference_generate",
+        "prompt": "特写，戴眼镜的男学生(小抄哥)，面色惨白，狂流汗，脖子上满是凌乱的蓝紫色墨水污渍，惊恐的表情，搞笑动漫风格，",
+        "composed_prompt": "[重要指令] 请严格保持参考图中所有角色的外貌、服装、面部特征完全一致。将角色自然地融入到当前镜头描述的场景中。不要改变角色的样貌。\nCharacter cards: 小抄哥: 小抄哥外貌图\nScene cards: 教室: 教室场景图\nCurrent shot: 特写，戴眼镜的男学生(小抄哥)，面色惨白，狂流汗，脖子上满是凌乱的蓝紫色墨水污渍，惊恐的表情，搞笑动漫风格，",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "image_url": "/outputs/20260428_233505_b214f703.png",
+        "source_image": "/uploads/20260428_233338_447ec9f7_refs.png",
+        "mask_image": null,
+        "continue_from_last": false,
+        "character_card_ids": [
+          "2b39e51f9c444a6a99e566d552bbc812"
+        ],
+        "scene_card_ids": [
+          "c165390b4100450aa5396fe53f0e69b0"
+        ],
+        "reference_images": [
+          "/uploads/20260428_232727_67afb1d5.png",
+          "/uploads/20260428_232843_4d3fe0f3.png"
+        ],
+        "reference_sources": {
+          "/uploads/20260428_232727_67afb1d5.png": "来自角色卡: 小抄哥",
+          "/uploads/20260428_232843_4d3fe0f3.png": "来自场景卡: 教室"
+        },
+        "created_at": "2026-04-28T23:35:07"
+      },
+      {
+        "id": "486fb2c793304b07928472f246536afe",
+        "shot_number": 2,
+        "mode": "reference_generate",
+        "prompt": "中景，(从背后看:1.3)，戴眼镜男学生(小抄哥)的背影正低头看手臂，一个严厉的地中海秃头监考老师（地中海教授）犹如鬼魅般站在他身旁，低头俯视，高对比度光影，压迫感气场",
+        "composed_prompt": "[重要指令] 请严格保持参考图中所有角色的外貌、服装、面部特征完全一致。将角色自然地融入到当前镜头描述的场景中。不要改变角色的样貌。\nCharacter cards: 小抄哥: 小抄哥外貌图 | 地中海教授: 地中海教授外貌图\nScene cards: 教室: 教室场景图\nCurrent shot: 中景，(从背后看:1.3)，戴眼镜男学生(小抄哥)的背影正低头看手臂，一个严厉的地中海秃头监考老师（地中海教授）犹如鬼魅般站在他身旁，低头俯视，高对比度光影，压迫感气场",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "image_url": "/outputs/20260428_233251_1b9716b7.png",
+        "source_image": "/uploads/20260428_233153_a46403c1_refs.png",
+        "mask_image": null,
+        "continue_from_last": false,
+        "character_card_ids": [
+          "2b39e51f9c444a6a99e566d552bbc812",
+          "2758a6888a2646258093b26a38d62bb6"
+        ],
+        "scene_card_ids": [
+          "c165390b4100450aa5396fe53f0e69b0"
+        ],
+        "reference_images": [
+          "/uploads/20260428_232727_67afb1d5.png",
+          "/uploads/20260428_233146_1c4d9094.png",
+          "/uploads/20260428_232843_4d3fe0f3.png"
+        ],
+        "reference_sources": {
+          "/uploads/20260428_232727_67afb1d5.png": "来自角色卡: 小抄哥",
+          "/uploads/20260428_233146_1c4d9094.png": "来自角色卡: 地中海教授",
+          "/uploads/20260428_232843_4d3fe0f3.png": "来自场景卡: 教室"
+        },
+        "created_at": "2026-04-28T23:32:55"
+      },
+      {
+        "id": "1688ce9e58e14093b5b34db02ad662b8",
+        "shot_number": 3,
+        "mode": "reference_generate",
+        "prompt": "特写，戴眼镜的紧张男学生正用笔在自己的手臂和脖子上写下密密麻麻的蓝色代码，流汗，考场背景",
+        "composed_prompt": "[重要指令] 请严格保持参考图中所有角色的外貌、服装、面部特征完全一致。将角色自然地融入到当前镜头描述的场景中。不要改变角色的样貌。\nCharacter cards: 小抄哥: 小抄哥外貌图\nScene cards: 教室: 教室场景图\nCurrent shot: 特写，戴眼镜的紧张男学生正用笔在自己的手臂和脖子上写下密密麻麻的蓝色代码，流汗，考场背景",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "image_url": "/outputs/20260428_233021_3be97e7e.png",
+        "source_image": "/uploads/20260428_232923_8872c359_refs.png",
+        "mask_image": null,
+        "continue_from_last": false,
+        "character_card_ids": [
+          "2b39e51f9c444a6a99e566d552bbc812"
+        ],
+        "scene_card_ids": [
+          "c165390b4100450aa5396fe53f0e69b0"
+        ],
+        "reference_images": [
+          "/uploads/20260428_232727_67afb1d5.png",
+          "/uploads/20260428_232843_4d3fe0f3.png"
+        ],
+        "reference_sources": {
+          "/uploads/20260428_232727_67afb1d5.png": "来自角色卡: 小抄哥",
+          "/uploads/20260428_232843_4d3fe0f3.png": "来自场景卡: 教室"
+        },
+        "created_at": "2026-04-28T23:30:23"
+      },
+      {
+        "id": "e9a344755db24ba2bcc9d7e255ccd228",
+        "shot_number": 4,
+        "mode": "reference_generate",
+        "prompt": "广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影，参照上传的角色图片，生图的画风要完全和上传角色图画风一致，主角林默在教室中随机位置坐着",
+        "composed_prompt": "[重要指令] 请严格保持参考图中所有角色的外貌、服装、面部特征完全一致。将角色自然地融入到当前镜头描述的场景中。不要改变角色的样貌。\nCharacter cards: 林默: 1\nCurrent shot: 广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影，参照上传的角色图片，生图的画风要完全和上传角色图画风一致，主角林默在教室中随机位置坐着",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "image_url": "/outputs/20260428_232609_fb32387d.png",
+        "source_image": "/uploads/20260428_231909_6861a332.jpg",
+        "mask_image": null,
+        "continue_from_last": false,
+        "character_card_ids": [
+          "ce7012ee76b74fe882f3d7e683dc5760"
+        ],
+        "scene_card_ids": [],
+        "reference_images": [
+          "/uploads/20260428_231909_6861a332.jpg"
+        ],
+        "reference_sources": {
+          "/uploads/20260428_231909_6861a332.jpg": "来自角色卡: 林默"
+        },
+        "created_at": "2026-04-28T23:26:11"
+      },
+      {
+        "id": "60a9d830984d412f9fdcf2ab159feacf",
+        "shot_number": 5,
+        "mode": "reference_generate",
+        "prompt": "广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影，参照上传的角色图片，生图的画风要完全和上传角色图画风一致，主角林默在教室中随机位置坐着",
+        "composed_prompt": "[重要指令] 请严格保持参考图中所有角色的外貌、服装、面部特征完全一致。将角色自然地融入到当前镜头描述的场景中。不要改变角色的样貌。\nCharacter cards: 林默: 1\nCurrent shot: 广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影，参照上传的角色图片，生图的画风要完全和上传角色图画风一致，主角林默在教室中随机位置坐着",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "image_url": "/outputs/20260428_232319_2651edea.png",
+        "source_image": "/uploads/20260428_231909_6861a332.jpg",
+        "mask_image": null,
+        "continue_from_last": false,
+        "character_card_ids": [
+          "ce7012ee76b74fe882f3d7e683dc5760"
+        ],
+        "scene_card_ids": [],
+        "reference_images": [
+          "/uploads/20260428_231909_6861a332.jpg"
+        ],
+        "reference_sources": {
+          "/uploads/20260428_231909_6861a332.jpg": "来自角色卡: 林默"
+        },
+        "created_at": "2026-04-28T23:23:22"
+      },
+      {
+        "id": "0c8aea8d67b94428abb15dfb6b072f8c",
+        "shot_number": 6,
+        "mode": "reference_generate",
+        "prompt": "广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影，参照上传的角色图片，生图的画风要完全和上传角色图画风一致",
+        "composed_prompt": "[重要指令] 请严格保持参考图中所有角色的外貌、服装、面部特征完全一致。将角色自然地融入到当前镜头描述的场景中。不要改变角色的样貌。\nCharacter cards: 林默: 1\nCurrent shot: 广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影，参照上传的角色图片，生图的画风要完全和上传角色图画风一致",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "image_url": "/outputs/20260428_232119_07c0c362.png",
+        "source_image": "/uploads/20260428_231909_6861a332.jpg",
+        "mask_image": null,
+        "continue_from_last": false,
+        "character_card_ids": [
+          "ce7012ee76b74fe882f3d7e683dc5760"
+        ],
+        "scene_card_ids": [],
+        "reference_images": [
+          "/uploads/20260428_231909_6861a332.jpg"
+        ],
+        "reference_sources": {
+          "/uploads/20260428_231909_6861a332.jpg": "来自角色卡: 林默"
+        },
+        "created_at": "2026-04-28T23:21:22"
+      },
+      {
+        "id": "678dec140bda42a3970abb4156a3acce",
+        "shot_number": 7,
+        "mode": "generate",
+        "prompt": "广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影，参考我上传的参考图片，必须保证和我上传的图片画风一致",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "image_url": "/outputs/20260428_225736_9a39cc8c.png",
+        "source_image": null,
+        "mask_image": null,
+        "continue_from_last": false,
+        "created_at": "2026-04-28T22:57:39"
+      },
+      {
+        "id": "d11425efa98643fa971f16622b2fbaf0",
+        "shot_number": 8,
+        "mode": "generate",
+        "prompt": "广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影，参考我上传的人物图 保证和主角画风一致",
+        "model": "gpt-image-2",
+        "size": "1536x1024",
+        "image_url": "/outputs/20260428_215920_874b3163.png",
+        "source_image": null,
+        "mask_image": null,
+        "continue_from_last": false,
+        "created_at": "2026-04-28T21:59:20"
+      },
+      {
+        "id": "1365ef418ca04e86935f58425de239cd",
+        "shot_number": 9,
+        "mode": "generate",
+        "prompt": "广角镜头，压抑的大学考场，苍白的日光灯，密密麻麻低头做题的学生，氛围紧张，电影级阴影,保证教室场景与主角林默保持一致",
+        "model": "gpt-image-2",
+        "size": "1024x1536",
+        "image_url": "/outputs/20260428_211156_b4c3b067.png",
+        "source_image": null,
+        "mask_image": null,
+        "continue_from_last": false,
+        "created_at": "2026-04-28T21:11:56"
+      }
+    ],
+    "shot_plan": [],
+    "character_cards": [
+      {
+        "id": "ce7012ee76b74fe882f3d7e683dc5760",
+        "name": "林默",
+        "content": "1",
+        "image_url": "/uploads/20260428_231909_6861a332.jpg",
+        "created_at": "2026-04-28T23:19:09"
+      },
+      {
+        "id": "2b39e51f9c444a6a99e566d552bbc812",
+        "name": "小抄哥",
+        "content": "小抄哥外貌图",
+        "image_url": "/uploads/20260428_232727_67afb1d5.png",
+        "created_at": "2026-04-28T23:27:28"
+      },
+      {
+        "id": "2758a6888a2646258093b26a38d62bb6",
+        "name": "地中海教授",
+        "content": "地中海教授外貌图",
+        "image_url": "/uploads/20260428_233146_1c4d9094.png",
+        "created_at": "2026-04-28T23:31:46"
+      }
+    ],
+    "scene_cards": [
+      {
+        "id": "c165390b4100450aa5396fe53f0e69b0",
+        "name": "教室",
+        "content": "教室场景图",
+        "image_url": "/uploads/20260428_232843_4d3fe0f3.png",
+        "created_at": "2026-04-28T23:28:43"
+      }
+    ],
+    "screenplay_text": ""
+  }
+]
