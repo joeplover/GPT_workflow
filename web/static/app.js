@@ -141,6 +141,24 @@ function refillFromShot(shot) {
   setStatus(`已从第 ${shot.shot_number} 镜回填参数`);
 }
 
+async function downloadShot(shot) {
+  try {
+    const resp = await fetch(shot.image_url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `shot_${shot.shot_number}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus(`第 ${shot.shot_number} 镜下载完成`);
+  } catch (err) {
+    setStatus(`下载失败：${err.message}`);
+  }
+}
 function renderResult(shot) {
   els.resultEmpty.classList.add("is-hidden");
   els.resultCard.classList.remove("is-hidden");
@@ -169,6 +187,7 @@ function renderHistory(project) {
         <div class="history-actions">
           <button class="btn btn--small history-action" type="button" data-action="refill" data-shot-id="${escapeHtml(shot.id)}">回填</button>
           <button class="btn btn--small history-action" type="button" data-action="retry" data-shot-id="${escapeHtml(shot.id)}">重试</button>
+          <button class="btn btn--small history-action" type="button" data-action="download" data-shot-id="${escapeHtml(shot.id)}">下载</button>
         </div>
       </div>
     </article>
@@ -178,6 +197,10 @@ function renderHistory(project) {
     button.addEventListener("click", () => {
       const targetShot = shots.find((item) => item.id === button.dataset.shotId);
       if (!targetShot) {
+        return;
+      }
+      if (button.dataset.action === "download") {
+        downloadShot(targetShot);
         return;
       }
       refillFromShot(targetShot);
