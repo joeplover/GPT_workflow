@@ -1,4 +1,4 @@
-const state = {
+﻿const state = {
   config: null,
   projects: [],
   currentProjectId: "",
@@ -49,16 +49,44 @@ function currentProject() {
 }
 
 function selectedCardIds(type) {
-  const selector = type === "character" ? '[data-card-type="character"]:checked' : '[data-card-type="scene"]:checked';
+  const selector = type === "character"
+    ? '[data-card-type="character"]:checked'
+    : '[data-card-type="scene"]:checked';
   return Array.from(document.querySelectorAll(selector)).map((el) => el.value);
 }
 
 function applySelectedCards(type, ids) {
-  const selector = type === "character" ? '[data-card-type="character"]' : '[data-card-type="scene"]';
+  const selector = type === "character"
+    ? '[data-card-type="character"]'
+    : '[data-card-type="scene"]';
   const selected = new Set(ids || []);
   document.querySelectorAll(selector).forEach((el) => {
     el.checked = selected.has(el.value);
   });
+}
+
+function collectSelectionSnapshot() {
+  return {
+    character: selectedCardIds("character"),
+    scene: selectedCardIds("scene"),
+  };
+}
+
+function applySelectionSnapshot(snapshot) {
+  if (!snapshot) return;
+  applySelectedCards("character", snapshot.character || []);
+  applySelectedCards("scene", snapshot.scene || []);
+}
+
+function selectFirstCardSetIfEmpty() {
+  if (selectedCardIds("character").length === 0) {
+    const firstCharacter = document.querySelector('[data-card-type="character"]');
+    if (firstCharacter) firstCharacter.checked = true;
+  }
+  if (selectedCardIds("scene").length === 0) {
+    const firstScene = document.querySelector('[data-card-type="scene"]');
+    if (firstScene) firstScene.checked = true;
+  }
 }
 
 function escapeHtml(value) {
@@ -102,7 +130,7 @@ function renderCardList(container, cards, type) {
       : "";
     return `
     <label class="card-chip">
-      <input type="checkbox" data-card-type="${type}" value="${escapeHtml(card.id)}" checked>
+      <input type="checkbox" data-card-type="${type}" value="${escapeHtml(card.id)}">
       ${thumbHtml}
       <span>
         <strong>${escapeHtml(card.name)}</strong>
@@ -125,9 +153,7 @@ function renderProjectDetails() {
 }
 
 function refillFromShot(shot) {
-  if (!shot) {
-    return;
-  }
+  if (!shot) return;
   els.prompt.value = shot.prompt || "";
   if (shot.model) {
     els.model.value = shot.model;
@@ -159,6 +185,7 @@ async function downloadShot(shot) {
     setStatus(`下载失败：${err.message}`);
   }
 }
+
 function renderResult(shot) {
   els.resultEmpty.classList.add("is-hidden");
   els.resultCard.classList.remove("is-hidden");
@@ -196,16 +223,16 @@ function renderHistory(project) {
   document.querySelectorAll(".history-action").forEach((button) => {
     button.addEventListener("click", () => {
       const targetShot = shots.find((item) => item.id === button.dataset.shotId);
-      if (!targetShot) {
-        return;
-      }
+      if (!targetShot) return;
+
       if (button.dataset.action === "download") {
         downloadShot(targetShot);
         return;
       }
+
       refillFromShot(targetShot);
       if (button.dataset.action === "retry") {
-        els.form.requestSubmit();
+        submitForm(new Event("submit")).catch((error) => setStatus(`失败：${error.message}`));
       }
     });
   });
@@ -219,11 +246,11 @@ function updateSingleFileText(inputEl, textEl, emptyText) {
   textEl.textContent = inputEl.files[0].name;
 }
 
-let _refObjectUrls = [];
+let refObjectUrls = [];
 
 function updateReferencePreview() {
-  _refObjectUrls.forEach((url) => URL.revokeObjectURL(url));
-  _refObjectUrls = [];
+  refObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+  refObjectUrls = [];
 
   const project = currentProject();
   const files = Array.from(els.referenceImages.files || []);
@@ -234,12 +261,12 @@ function updateReferencePreview() {
   if (project) {
     for (const card of (project.character_cards || [])) {
       if (characterIds.includes(card.id) && card.image_url) {
-        cardRefs.push({ url: card.image_url, label: `来自角色卡: ${card.name}`, isCard: true });
+        cardRefs.push({ url: card.image_url, label: `来自角色卡 ${card.name}` });
       }
     }
     for (const card of (project.scene_cards || [])) {
       if (sceneIds.includes(card.id) && card.image_url) {
-        cardRefs.push({ url: card.image_url, label: `来自场景卡: ${card.name}`, isCard: true });
+        cardRefs.push({ url: card.image_url, label: `来自拍场景卡 ${card.name}`.replace("拍场景", "场景") });
       }
     }
   }
@@ -264,10 +291,9 @@ function updateReferencePreview() {
     `;
   }
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+  for (const file of files) {
     const objUrl = URL.createObjectURL(file);
-    _refObjectUrls.push(objUrl);
+    refObjectUrls.push(objUrl);
     html += `
       <div class="ref-chip">
         <img class="ref-chip__thumb" src="${objUrl}" alt="${escapeHtml(file.name)}">
@@ -287,28 +313,44 @@ async function loadConfig() {
   state.config = data;
   els.apiKey.value = data.api_key || "";
   els.baseUrl.value = data.base_url || "https://api.hi-code.cc/v1";
-  fillSelect(els.model, data.suggested_models || ["gpt-image-1"], data.default_model);
-  fillSelect(els.size, data.suggested_sizes || ["1536x1024"], data.default_size);
+  fillSelect(els.model, data.suggested_models || ["gpt-image-2"], data.default_model);
+  fillSelect(els.size, data.suggested_sizes || ["2048x1152"], data.default_size);
   els.configStatus.textContent = data.has_api_key ? `接口已就绪：${data.base_url}` : "未填写 API Key";
 }
 
 async function loadProjects() {
+  const previousSelection = collectSelectionSnapshot();
   const response = await fetch("/api/projects");
   state.projects = await response.json();
+
   if (!state.currentProjectId && state.projects.length) {
     state.currentProjectId = state.projects[0].id;
   }
+
   renderProjectOptions();
   renderProjectDetails();
+
   const project = currentProject();
   if (project) {
     els.projectName.value = project.name || "";
     renderHistory(project);
+
     if (project.shots && project.shots.length) {
-      renderResult(project.shots[0]);
+      const latestShot = project.shots[0];
+      renderResult(latestShot);
+      applySelectedCards("character", latestShot.character_card_ids || []);
+      applySelectedCards("scene", latestShot.scene_card_ids || []);
+    } else {
+      applySelectionSnapshot(previousSelection);
+      selectFirstCardSetIfEmpty();
     }
+  } else {
+    els.projectName.value = "";
+    renderHistory(null);
   }
-  setStatus("就绪 — 请创建角色卡或直接生图");
+
+  updateReferencePreview();
+  setStatus("就绪 - 请创建角色卡或直接生图");
 }
 
 async function ensureActiveProject() {
@@ -324,6 +366,7 @@ async function ensureActiveProject() {
   const formData = new FormData();
   formData.append("name", name);
   formData.append("synopsis", "");
+
   const response = await fetch("/api/projects", { method: "POST", body: formData });
   const data = await response.json();
   if (!response.ok) {
@@ -340,9 +383,10 @@ async function createCard(type) {
   try {
     project = await ensureActiveProject();
   } catch (e) {
-    setStatus(`失败：${e.message}（请先在下拉框选择项目，或填写"新项目名称"后重试）`);
+    setStatus(`失败：${e.message}（请先在下拉框选择项目，或填写新项目名称后重试）`);
     return;
   }
+
   const name = type === "character" ? els.characterName.value.trim() : els.sceneName.value.trim();
   const content = type === "character" ? els.characterContent.value.trim() : els.sceneContent.value.trim();
 
@@ -358,10 +402,12 @@ async function createCard(type) {
   formData.append("card_type", type);
   formData.append("name", name);
   formData.append("content", content);
+
   const imageInput = type === "character" ? els.characterImage : els.sceneImage;
   if (imageInput.files && imageInput.files.length) {
     formData.append("image", imageInput.files[0]);
   }
+
   const response = await fetch(`/api/projects/${project.id}/cards`, { method: "POST", body: formData });
   const data = await response.json();
   if (!response.ok) {
@@ -382,7 +428,7 @@ async function createCard(type) {
 
   await loadProjects();
   const cardLabel = type === "character" ? "角色卡" : "场景卡";
-  setStatus(`${cardLabel}「${name}」已创建 ✓`);
+  setStatus(`${cardLabel}「${name}」已创建`);
 }
 
 async function submitForm(event) {
@@ -405,15 +451,7 @@ async function submitForm(event) {
     formData.append("continue_from_last", "false");
 
     const refFiles = Array.from(els.referenceImages.files || []);
-    const cardCheckCount = selectedCardIds("character").length + selectedCardIds("scene").length;
-    console.log(`[submitForm] 卡片选中: ${cardCheckCount}, 参考图文件: ${refFiles.length}`);
-    refFiles.forEach((file) => {
-      formData.append("reference_images", file);
-    });
-
-    if (!cardCheckCount && !refFiles.length) {
-      console.warn("[submitForm] 警告: 未选中任何卡片，也未上传参考图，将使用纯文生图模式");
-    }
+    refFiles.forEach((file) => formData.append("reference_images", file));
 
     const response = await fetch("/api/generate", { method: "POST", body: formData });
     const data = await response.json();
@@ -436,34 +474,48 @@ async function submitForm(event) {
 els.addCharacterCardBtn.addEventListener("click", () => {
   createCard("character").catch((error) => setStatus(`失败：${error.message}`));
 });
+
 els.addSceneCardBtn.addEventListener("click", () => {
   createCard("scene").catch((error) => setStatus(`失败：${error.message}`));
 });
+
 els.projectSelect.addEventListener("change", (event) => {
   state.currentProjectId = event.target.value;
   const project = currentProject();
+
   if (project) {
     els.projectName.value = project.name;
     renderProjectDetails();
-    renderHistory(project);
+
     if (project.shots.length) {
+      applySelectedCards("character", project.shots[0].character_card_ids || []);
+      applySelectedCards("scene", project.shots[0].scene_card_ids || []);
       renderResult(project.shots[0]);
+    } else {
+      selectFirstCardSetIfEmpty();
     }
+
+    renderHistory(project);
   } else {
     els.projectName.value = "";
     renderCardList(els.characterCardList, [], "character");
     renderCardList(els.sceneCardList, [], "scene");
     renderHistory(null);
   }
+
+  updateReferencePreview();
 });
 
 els.characterImage.addEventListener("change", () => {
   updateSingleFileText(els.characterImage, els.characterImageText, "选择参考图");
 });
+
 els.sceneImage.addEventListener("change", () => {
   updateSingleFileText(els.sceneImage, els.sceneImageText, "选择参考图");
 });
+
 els.referenceImages.addEventListener("change", updateReferencePreview);
+
 els.submitBtn.addEventListener("click", (event) => {
   event.preventDefault();
   submitForm(event).catch((error) => setStatus(`失败：${error.message}`));
@@ -482,6 +534,7 @@ updateReferencePreview();
 loadConfig().catch((error) => {
   els.configStatus.textContent = `配置读取失败：${error.message}`;
 });
+
 loadProjects().catch((error) => {
   setStatus(`项目读取失败：${error.message}`);
 });

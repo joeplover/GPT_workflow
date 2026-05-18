@@ -3,6 +3,7 @@ import json
 import os
 import re
 import uuid
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -56,8 +57,8 @@ def get_settings() -> Dict[str, Any]:
     return {
         "api_key": os.getenv("HICODE_API_KEY") or os.getenv("OPENAI_API_KEY") or "",
         "base_url": os.getenv("HICODE_BASE_URL", "https://api.hi-code.cc/v1").rstrip("/"),
-        "default_model": os.getenv("HICODE_IMAGE_MODEL", "gpt-image-1"),
-        "default_size": os.getenv("HICODE_IMAGE_SIZE", "1536x1024"),
+        "default_model": os.getenv("HICODE_IMAGE_MODEL", "gpt-image-2"),
+        "default_size": os.getenv("HICODE_IMAGE_SIZE", "2048x1152"),
         "verify_ssl": os.getenv("HICODE_VERIFY_SSL", "true").lower() != "false",
         "use_env_proxy": os.getenv("HICODE_USE_ENV_PROXY", "false").lower() == "true",
         "request_timeout": request_timeout,
@@ -329,8 +330,44 @@ def normalize_generation_args(model: str, size: str) -> Dict[str, str]:
     if not model_clean:
         raise HTTPException(status_code=400, detail="Model is required.")
     if not re.match(r"^\d{3,5}x\d{3,5}$", size_clean):
-        raise HTTPException(status_code=400, detail="Size must be formatted as WIDTHxHEIGHT, for example 1536x1024.")
+        raise HTTPException(status_code=400, detail="Size must be formatted as WIDTHxHEIGHT, for example 2048x1152.")
     return {"model": model_clean, "size": size_clean}
+
+
+def _extract_relay_error_text(response: requests.Response) -> str:
+    body_preview = response.text[:800]
+    try:
+        payload = response.json()
+    except ValueError:
+        return body_preview
+
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
+        message = payload.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+        detail = payload.get("detail")
+        if isinstance(detail, str) and detail.strip():
+            return detail.strip()
+
+    return body_preview
+
+
+def _raise_relay_http_error(response: requests.Response, operation: str) -> None:
+    status = response.status_code
+    upstream_message = _extract_relay_error_text(response)
+    detail = (
+        f"Relay {operation} API failed. "
+        f"upstream_status={status}, upstream_message={upstream_message}"
+    )
+    # Upstream 4xx are request/auth/quota issues and should not be surfaced as 502.
+    if 400 <= status < 500:
+        raise HTTPException(status_code=400, detail=detail)
+    raise HTTPException(status_code=502, detail=detail)
 
 
 def persist_result(result: Dict[str, Any], session: requests.Session, verify_ssl: bool) -> str:
@@ -367,8 +404,7 @@ def relay_generate_raw(prompt: str, model: str, size: str, api_key: str, base_ur
         verify=verify_ssl,
     )
     if not response.ok:
-        body_preview = response.text[:300]
-        raise HTTPException(status_code=502, detail=f"Relay generate API failed: HTTP {response.status_code}, body={body_preview}")
+        _raise_relay_http_error(response, operation="generate")
     result = response.json()
     return {"image_url": persist_result(result, session, verify_ssl)}
 
@@ -401,8 +437,7 @@ def relay_edit_raw(prompt: str, model: str, size: str, image_path: Path, mask_pa
                 verify=verify_ssl,
             )
     if not response.ok:
-        body_preview = response.text[:300]
-        raise HTTPException(status_code=502, detail=f"Relay edit API failed: HTTP {response.status_code}, body={body_preview}")
+        _raise_relay_http_error(response, operation="edit")
     result = response.json()
     return {"image_url": persist_result(result, session, verify_ssl)}
 
@@ -497,8 +532,8 @@ def read_config() -> Dict[str, Any]:
         "api_key": settings["api_key"],
         "has_api_key": bool(settings["api_key"]),
         "supported_modes": ["generate", "edit"],
-        "suggested_models": ["gpt-image-1", "gpt-image-2"],
-        "suggested_sizes": ["1024x1024", "1536x1024", "1024x1536"],
+        "suggested_models": ["gpt-image-2"],
+        "suggested_sizes": ["2048x1152", "1024x1024", "1536x1024", "1024x1536"],
     }
 
 
@@ -607,8 +642,8 @@ async def generate_image(
     character_card_ids: str = Form(""),
     scene_card_ids: str = Form(""),
     prompt: str = Form(...),
-    model: str = Form("gpt-image-1"),
-    size: str = Form("1536x1024"),
+    model: str = Form("gpt-image-2"),
+    size: str = Form("2048x1152"),
     reference_images: List[UploadFile] = File(default=None),
 ) -> Dict[str, Any]:
     if not prompt.strip():
@@ -625,12 +660,13 @@ async def generate_image(
     use_last = continue_from_last.lower() == "true"
     last_shot = project["shots"][0] if project["shots"] else None
 
+    request_id = uuid.uuid4().hex[:8]
     ref_count = len(reference_images) if reference_images else 0
-    print(f"[DEBUG] generate_image 收到参数: project_id={project_id}, character_card_ids={selected_character_ids}, scene_card_ids={selected_scene_ids}, reference_images数量={ref_count}")
+    print(f"[DEBUG][{request_id}] generate_image 收到参数: project_id={project_id}, character_card_ids={selected_character_ids}, scene_card_ids={selected_scene_ids}, reference_images数量={ref_count}")
 
     card_image_paths = get_card_image_paths(project, selected_character_ids, selected_scene_ids)
     card_image_labels = get_card_image_labels(project, selected_character_ids, selected_scene_ids)
-    print(f"[DEBUG] 卡片图片路径: {[str(p) for p in card_image_paths]}")
+    print(f"[DEBUG][{request_id}] 卡片图片路径: {[str(p) for p in card_image_paths]}")
 
     uploaded_paths: List[Path] = []
     if reference_images:
@@ -640,7 +676,7 @@ async def generate_image(
                 if path:
                     uploaded_paths.append(path)
     uploaded_urls = [path_to_upload_url(path) for path in uploaded_paths if path]
-    print(f"[DEBUG] 上传参考图保存数量: {len(uploaded_paths)}")
+    print(f"[DEBUG][{request_id}] 上传参考图保存数量: {len(uploaded_paths)}")
 
     reference_paths = card_image_paths + uploaded_paths
     # 去重（基于文件绝对路径）
@@ -669,7 +705,7 @@ async def generate_image(
 
     try:
         if reference_paths:
-            print(f"[DEBUG] 使用 reference_generate 模式，参考图数量: {len(reference_paths)}")
+            print(f"[DEBUG][{request_id}] 使用 reference_generate 模式，参考图数量: {len(reference_paths)}")
             collage_path = build_reference_collage(reference_paths)
             result = relay_edit_raw(
                 prompt=composed_prompt,
@@ -686,7 +722,7 @@ async def generate_image(
             source_image = path_to_upload_url(collage_path)
             mode = "reference_generate"
         elif use_last and last_shot:
-            print(f"[DEBUG] 使用 continue 模式，基于上一镜")
+            print(f"[DEBUG][{request_id}] 使用 continue 模式，基于上一镜")
             last_image_path = local_path_from_url(last_shot["image_url"])
             if not last_image_path:
                 raise HTTPException(status_code=400, detail="Last shot image not found locally.")
@@ -705,7 +741,7 @@ async def generate_image(
             source_image = last_shot["image_url"]
             mode = "continue"
         else:
-            print(f"[DEBUG] 使用 generate 模式（纯文生图，无参考图）")
+            print(f"[DEBUG][{request_id}] 使用 generate 模式（纯文生图，无参考图）")
             result = relay_generate_raw(
                 prompt=composed_prompt,
                 model=validated["model"],
@@ -722,8 +758,15 @@ async def generate_image(
         raise HTTPException(status_code=502, detail=f"SSL error while calling relay API: {exc}") from exc
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"Relay API request failed: {exc}") from exc
+    except HTTPException as exc:
+        print(f"[ERROR][{request_id}] HTTPException status={exc.status_code} detail={exc.detail}")
+        raise
+    except Exception as exc:
+        print(f"[ERROR][{request_id}] Unexpected error: {exc}")
+        print(traceback.format_exc())
+        raise
 
-    print(f"[DEBUG] 生成完成, mode={mode}, composed_prompt前100字符: {composed_prompt[:100]}...")
+    print(f"[DEBUG][{request_id}] 生成完成, mode={mode}, composed_prompt前100字符: {composed_prompt[:100]}...")
     return add_shot_to_project(
         project_id=project["id"],
         mode=mode,
@@ -752,8 +795,8 @@ async def edit_image(
     character_card_ids: str = Form(""),
     scene_card_ids: str = Form(""),
     prompt: str = Form(...),
-    model: str = Form("gpt-image-1"),
-    size: str = Form("1536x1024"),
+    model: str = Form("gpt-image-2"),
+    size: str = Form("2048x1152"),
     image: Optional[UploadFile] = File(None),
     mask: Optional[UploadFile] = File(None),
     reference_images: List[UploadFile] = File([]),

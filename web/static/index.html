@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -15,14 +15,13 @@
     <input id="baseUrl" placeholder="接口地址" class="topbar__input topbar__input--url">
     <select id="projectSelect" class="topbar__select"></select>
     <input id="projectName" placeholder="新项目名称" class="topbar__input topbar__input--proj">
-    <span id="configStatus" class="topbar__status">加载中</span>
+    <span id="configStatus" class="topbar__status">加载中...</span>
   </div>
 </header>
 
 <div class="main">
   <div class="left">
 
-    <!-- 角色卡 -->
     <section class="panel">
       <h2 class="panel__title">角色卡</h2>
       <div class="card-form">
@@ -39,7 +38,6 @@
       <div id="characterCardList" class="card-list"></div>
     </section>
 
-    <!-- 场景卡 -->
     <section class="panel">
       <h2 class="panel__title">场景卡</h2>
       <div class="card-form">
@@ -56,10 +54,9 @@
       <div id="sceneCardList" class="card-list"></div>
     </section>
 
-    <!-- 生成参数 -->
     <section class="panel">
       <h2 class="panel__title">生成参数</h2>
-      <textarea id="prompt" rows="4" placeholder="当前镜头提示词：主体、动作、构图、机位、氛围……" class="field-input"></textarea>
+      <textarea id="prompt" rows="4" placeholder="当前镜头提示词：主体、动作、构图、机位、氛围..." class="field-input"></textarea>
       <div class="gen-row">
         <select id="model" class="field-input"></select>
         <select id="size" class="field-input"></select>
@@ -79,7 +76,6 @@
 
   <div class="right">
 
-    <!-- 生成结果 -->
     <section class="panel">
       <h2 class="panel__title">生成结果</h2>
       <div id="resultEmpty" class="empty-state">最新生成结果会显示在这里。</div>
@@ -94,7 +90,6 @@
       </div>
     </section>
 
-    <!-- 镜头历史 -->
     <section class="panel">
       <h2 class="panel__title">镜头历史</h2>
       <div id="historyList" class="history-grid">
