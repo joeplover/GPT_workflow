@@ -1,2 +1,16 @@
 /web/runtime/uploads/
 /web/runtime/outputs/
+
+# Python env/cache
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# IDE
+.idea/
+
+# Runtime records/logs
+/web/runtime/*.log
+/web/runtime/history.json
+/web/runtime/projects.json

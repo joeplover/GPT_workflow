@@ -1,0 +1,14 @@
+services:
+  gpt_workflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gpt_workflow
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "-m", "web.app"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./web/runtime:/app/web/runtime
