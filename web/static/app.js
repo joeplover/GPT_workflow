@@ -355,7 +355,11 @@ async function loadProjects() {
 
 async function ensureActiveProject() {
   if (state.currentProjectId) {
-    return currentProject();
+    const project = currentProject();
+    if (project) {
+      return project;
+    }
+    state.currentProjectId = "";
   }
 
   const name = els.projectName.value.trim();
@@ -427,6 +431,9 @@ async function createCard(type) {
   }
 
   await loadProjects();
+  state.currentProjectId = data.id;
+  renderProjectDetails();
+  updateReferencePreview();
   const cardLabel = type === "character" ? "角色卡" : "场景卡";
   setStatus(`${cardLabel}「${name}」已创建`);
 }
