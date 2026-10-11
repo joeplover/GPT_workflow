@@ -120,7 +120,7 @@ def test_empty_optional_sections(system_prompt, has_reference):
 
 def create_project_and_cards(client, image_card_type=None):
     project = client.post(
-        "/api/projects", data={"name": "拼接测试", "synopsis": "雨夜故事"}
+        "/photodream/api/projects", data={"name": "拼接测试", "synopsis": "雨夜故事"}
     ).json()
     selected = {}
     for card_type, name, content in [
@@ -130,7 +130,7 @@ def create_project_and_cards(client, image_card_type=None):
         ("scene", "未选场景", "不应传给模型"),
     ]:
         response = client.post(
-            f"/api/projects/{project['id']}/cards",
+            f"/photodream/api/projects/{project['id']}/cards",
             data={"card_type": card_type, "name": name, "content": content},
             files={"image": ("ref.png", png_bytes(), "image/png")}
             if card_type == image_card_type and not name.startswith("未选")
@@ -157,12 +157,12 @@ def test_complete_prompt_survives_http_encoding_and_history(
         "scene_card_ids": [selected["scene"]],
     }
     if endpoint == "frame":
-        url = f"/api/projects/{project_id}/frames"
+        url = f"/photodream/api/projects/{project_id}/frames"
         frame = client.post(url, json=body).json()
         response = client.post(f"{url}/{frame['id']}/generate", json=body)
     else:
         response = client.post(
-            f"/api/{endpoint}",
+            f"/photodream/api/{endpoint}",
             data={
                 **body,
                 "character_card_ids": selected["character"],
@@ -207,7 +207,7 @@ def test_concurrent_frames_do_not_mix_prompts_or_card_selections(
     client, outgoing, monkeypatch
 ):
     project_id, selected = create_project_and_cards(client)
-    url = f"/api/projects/{project_id}/frames"
+    url = f"/photodream/api/projects/{project_id}/frames"
     bodies = [
         {
             "prompt": "海边远景",
@@ -248,7 +248,7 @@ def test_regenerate_after_changing_only_system_prompt_preserves_previous_version
     client, outgoing
 ):
     project_id, selected = create_project_and_cards(client)
-    url = f"/api/projects/{project_id}/frames"
+    url = f"/photodream/api/projects/{project_id}/frames"
     body = {"prompt": "海边", "system_prompt": "冷色调"}
     frame = client.post(url, json=body).json()
     generate_url = f"{url}/{frame['id']}/generate"
@@ -274,7 +274,7 @@ def test_legacy_generation_should_preserve_omitted_project_background(
 ):
     project_id, _ = create_project_and_cards(client)
     response = client.post(
-        f"/api/{endpoint}",
+        f"/photodream/api/{endpoint}",
         data={"project_id": project_id, "prompt": "海边"},
         files={"image": ("main.png", png_bytes(), "image/png")}
         if endpoint == "edit"
@@ -291,10 +291,10 @@ def test_legacy_generation_should_preserve_omitted_project_background(
 def test_continuation_should_include_reference_consistency_instruction(
     client, outgoing
 ):
-    first = client.post("/api/generate", data={"prompt": "海边"})
+    first = client.post("/photodream/api/generate", data={"prompt": "海边"})
     assert first.status_code == 200
     response = client.post(
-        "/api/generate",
+        "/photodream/api/generate",
         data={
             "project_id": first.json()["project"]["id"],
             "prompt": "下一镜",

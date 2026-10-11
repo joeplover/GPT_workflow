@@ -4,11 +4,11 @@ const templates = {single:"index",storyboard:"storyboard"};
 function prepare(name) {
   if (!prepared.has(name)) {
     const promise = Promise.all([
-      fetch(`/static/${templates[name]}.html`).then(r => { if (!r.ok) throw new Error("工作台页面加载失败"); return r.text(); }),
-      fetch(`/static/${name === "single" ? "styles" : "storyboard"}.css`).then(r => { if (!r.ok) throw new Error("工作台样式加载失败"); return r.text(); }),
-      fetch("/static/workbench-theme.css").then(r => { if (!r.ok) throw new Error("工作台样式加载失败"); return r.text(); }),
-      import(name === "single" ? "/static/app.js" : "/static/storyboard.js"),
-      import("/static/image-settings.js"),
+      fetch(`/photodream/static/${templates[name]}.html`).then(r => { if (!r.ok) throw new Error("工作台页面加载失败"); return r.text(); }),
+      fetch(`/photodream/static/${name === "single" ? "styles" : "storyboard"}.css`).then(r => { if (!r.ok) throw new Error("工作台样式加载失败"); return r.text(); }),
+      fetch("/photodream/static/workbench-theme.css").then(r => { if (!r.ok) throw new Error("工作台样式加载失败"); return r.text(); }),
+      import(name === "single" ? "/photodream/static/app.js" : "/photodream/static/storyboard.js"),
+      import("/photodream/static/image-settings.js"),
     ]);
     prepared.set(name,promise);
     promise.catch(() => { if (prepared.get(name) === promise) prepared.delete(name); });

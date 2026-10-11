@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import database
+from ..config import APP_PREFIX
 from ..models import LoginAttempt, User, UserSession
 from ..security import (
     COOKIE_NAME,
@@ -53,6 +54,8 @@ def user_info(user):
 
 
 def set_session(session: Session, user: User, response: Response):
+    # Remove the previous root cookie to avoid duplicate session names on upgrade.
+    response.delete_cookie(COOKIE_NAME, path="/")
     token = secrets.token_urlsafe(32)
     session.add(
         UserSession(
@@ -68,7 +71,7 @@ def set_session(session: Session, user: User, response: Response):
         httponly=True,
         secure=secure_cookie(),
         samesite="lax",
-        path="/",
+        path=APP_PREFIX,
     )
 
 
@@ -169,7 +172,7 @@ def logout(request: Request, response: Response):
                 UserSession.token_hash == digest(request.cookies.get(COOKIE_NAME, ""))
             )
         )
-    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(COOKIE_NAME, path=APP_PREFIX)
     return {"ok": True}
 
 
@@ -189,5 +192,5 @@ def password(body: PasswordInput, response: Response):
             raise HTTPException(400, "当前密码不正确。")
         user.password_hash = hash_password(body.new_password)
         session.execute(delete(UserSession).where(UserSession.user_id == user.id))
-    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(COOKIE_NAME, path=APP_PREFIX)
     return {"ok": True}

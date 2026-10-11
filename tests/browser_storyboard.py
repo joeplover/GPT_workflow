@@ -62,14 +62,14 @@ async def check(args):
             and request.headers.get("content-type") == "application/json"
             else {}
         )
-        if path == "/api/auth/me":
+        if path == "/photodream/api/auth/me":
             data = {
                 "id": "demo-user",
                 "username": "demo",
                 "display_name": "测试用户",
                 "is_admin": False,
             }
-        elif path == "/api/config":
+        elif path == "/photodream/api/config":
             data = {
                 "base_url": "http://test-relay/v1",
                 "has_api_key": True,
@@ -84,7 +84,7 @@ async def check(args):
                     {"size": "1080x1920", "label": "9:16 · 1080 × 1920"},
                 ],
             }
-        elif path == "/api/projects":
+        elif path == "/photodream/api/projects":
             if request.method == "POST":
                 envelope = BytesParser(policy=default).parsebytes(
                     (
@@ -103,12 +103,12 @@ async def check(args):
                 data = deepcopy(project)
             else:
                 data = [project] if project_available else []
-        elif path == "/api/projects/demo":
+        elif path == "/photodream/api/projects/demo":
             data = {**project, "frames": deepcopy(frames)}
-        elif path == "/api/projects/demo/workspace":
+        elif path == "/photodream/api/projects/demo/workspace":
             project.setdefault("workspace", {}).update(body)
             data = deepcopy(project["workspace"])
-        elif path == "/api/projects/demo/events":
+        elif path == "/photodream/api/projects/demo/events":
             data = [
                 {
                     "id": 1,
@@ -117,13 +117,13 @@ async def check(args):
                     "changes": [],
                 }
             ]
-        elif path == "/api/projects/demo/frames/initialize":
+        elif path == "/photodream/api/projects/demo/frames/initialize":
             if not project.get("frames_initialized"):
                 if not frames:
                     make_frame({})
                 project["frames_initialized"] = True
             data = deepcopy(frames)
-        elif path == "/api/projects/demo/cards":
+        elif path == "/photodream/api/projects/demo/cards":
             envelope = BytesParser(policy=default).parsebytes(
                 (
                     "Content-Type: " + request.headers["content-type"] + "\r\n\r\n"
@@ -149,20 +149,20 @@ async def check(args):
                 }
             )
             data = deepcopy(project)
-        elif path == "/api/projects/demo/frames/apply-cards":
+        elif path == "/photodream/api/projects/demo/frames/apply-cards":
             data = []
             for frame in frames:
                 if frame["id"] in body["frame_ids"]:
                     frame["character_card_ids"] = body["character_card_ids"]
                     frame["scene_card_ids"] = body["scene_card_ids"]
                     data.append(deepcopy(frame))
-        elif path == "/api/projects/demo/frames":
+        elif path == "/photodream/api/projects/demo/frames":
             if request.method == "POST":
                 data = make_frame(body)
             else:
                 data = deepcopy(frames)
         else:
-            frame = next(f for f in frames if f["id"] == path.split("/")[5])
+            frame = next(f for f in frames if f["id"] == path.split("/")[6])
             if request.method == "DELETE":
                 frames.remove(frame)
                 project["frames_initialized"] = True
@@ -242,7 +242,7 @@ async def check(args):
             )
         await page.route("**/api/**", mock)
         await page.route("**/outputs/**", image)
-        await page.goto(args.url + "/storyboard")
+        await page.goto(args.url + "/photodream/storyboard")
         await expect(page.locator("#connection")).to_have_text("已连接")
         await page.locator("#operationPanel summary").click()
         await expect(page.locator("#operationList")).to_contain_text("保存镜头修改")
@@ -439,7 +439,7 @@ async def check(args):
         await expect(page.locator("#selectedPosition")).to_have_text("04 / 05")
         await expect(
             page.locator(".film-frame.active .frame-picture img")
-        ).to_have_attribute("src", frames[3]["image_url"])
+        ).to_have_attribute("src", "/photodream" + frames[3]["image_url"])
         await page.wait_for_timeout(200)
         gallery_geometry = await page.evaluate("""() => {
             const viewport = document.querySelector('studio-workbench[data-workbench=storyboard]').shadowRoot.getElementById('filmScroll').getBoundingClientRect();
@@ -477,7 +477,7 @@ async def check(args):
         )
         await expect(
             page.locator(".film-frame.active .frame-picture img")
-        ).to_have_attribute("src", frames[4]["image_url"])
+        ).to_have_attribute("src", "/photodream" + frames[4]["image_url"])
         geometry = await page.evaluate("""() => {
             const viewport = document.querySelector('studio-workbench[data-workbench=storyboard]').shadowRoot.getElementById('filmScroll').getBoundingClientRect();
             const frame = document.querySelector('studio-workbench[data-workbench=storyboard]').shadowRoot.querySelector('.film-frame.active').getBoundingClientRect();
@@ -545,7 +545,7 @@ async def check(args):
         await expect(page.locator("#prompt")).to_have_value("")
         assert not errors, errors
         assert not errors, errors
-        await page.goto(args.url + "/single")
+        await page.goto(args.url + "/photodream/single")
         await expect(page.locator("#size")).to_have_value("2048x1152")
         await page.locator("#model").fill("another-custom-model")
         await page.locator("#sizePreset").select_option("1920x1080")
@@ -558,7 +558,7 @@ async def check(args):
         project.pop("frames_initialized", None)
         project.pop("workspace", None)
         project_available = False
-        await page.goto(args.url + "/storyboard")
+        await page.goto(args.url + "/photodream/storyboard")
         await expect(page.locator("#connection")).to_have_text("已连接")
         await expect(page.locator(".film-frame")).to_have_count(1)
         await expect(page.locator("#prompt")).to_have_value("")
@@ -595,7 +595,7 @@ async def check(args):
         await expect(page.locator("#cardContent")).to_have_value("草稿里的光线和天气")
         await page.locator('[data-close="cardDialog"]').click()
         # The single-image page stores unsubmitted text in PostgreSQL too.
-        await page.goto(args.url + "/single")
+        await page.goto(args.url + "/photodream/single")
         await page.locator("#prompt").fill("单图页面未生成的提示词")
         await page.locator("#systemPrompt").fill("单图页面系统提示词")
         await page.wait_for_timeout(600)
@@ -610,19 +610,19 @@ async def check(args):
         generation_gate = asyncio.Event()
         board = page.locator('studio-workbench[data-workbench="storyboard"]')
         single = page.locator('studio-workbench[data-workbench="single"]')
-        await page.locator('.studio-links a[href="/storyboard"]').click()
+        await page.locator('.studio-links a[href="/photodream/storyboard"]').click()
         await expect(board).to_be_visible()
         await board.locator("#size").fill("1920x1080")
         await board.locator("#prompt").fill("切换工作台期间继续生成的画面")
         previous_calls = calls
         await board.locator("#generateFrame").click()
         await expect(board.locator("#generateFrame")).to_have_text("生成中…")
-        await page.locator('.studio-links a[href="/single"]').click()
+        await page.locator('.studio-links a[href="/photodream/single"]').click()
         await expect(single).to_be_visible()
         await expect(single.locator("#prompt")).to_have_value("单图页面未生成的提示词")
         generation_gate.set()
         await expect(board.locator("#previewStatus")).to_have_text("已完成")
-        await page.locator('.studio-links a[href="/storyboard"]').click()
+        await page.locator('.studio-links a[href="/photodream/storyboard"]').click()
         await expect(board).to_be_visible()
         await expect(board.locator("#previewStatus")).to_have_text("已完成")
         await expect(board.locator("#prompt")).to_have_value(

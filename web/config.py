@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+APP_PREFIX = "/photodream"
 RUNTIME_DIR = Path(
     os.getenv("WORKFLOW_RUNTIME_DIR", str(BASE_DIR / "runtime"))
 ).resolve()

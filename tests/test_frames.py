@@ -11,8 +11,8 @@ from web.routers import frames as routes
 
 
 def setup_frames(client, count=3):
-    project = client.post("/api/projects", data={"name": "胶片项目"}).json()
-    url = f"/api/projects/{project['id']}/frames"
+    project = client.post("/photodream/api/projects", data={"name": "胶片项目"}).json()
+    url = f"/photodream/api/projects/{project['id']}/frames"
     frames = [
         client.post(url, json={"prompt": f"画面{i}"}).json() for i in range(count)
     ]
@@ -21,8 +21,8 @@ def setup_frames(client, count=3):
 
 def test_frame_editing_persistence_and_page(client):
     project_id, url, frames = setup_frames(client)
-    assert client.get("/storyboard").status_code == 200
-    assert client.get("/static/storyboard.js").status_code == 200
+    assert client.get("/photodream/storyboard").status_code == 200
+    assert client.get("/photodream/static/storyboard.js").status_code == 200
     assert client.get(url).json() == frames
     saved = client.post(
         f"{url}/{frames[1]['id']}",
@@ -44,8 +44,8 @@ def test_initialize_one_default_frame_once_even_with_concurrent_opens(
 ):
     monkeypatch.setenv("HICODE_IMAGE_MODEL", "my-default-model")
     monkeypatch.setenv("HICODE_IMAGE_SIZE", "1920x1080")
-    project = client.post("/api/projects", data={"name": "新项目"}).json()
-    url = f"/api/projects/{project['id']}/frames"
+    project = client.post("/photodream/api/projects", data={"name": "新项目"}).json()
+    url = f"/photodream/api/projects/{project['id']}/frames"
     assert client.get(url).json() == []
     with ThreadPoolExecutor(max_workers=4) as pool:
         responses = list(pool.map(lambda _: client.post(f"{url}/initialize"), range(4)))
@@ -72,7 +72,10 @@ def test_initialize_preserves_existing_storyboard_and_legacy_project(client):
     mutate_project(project_id, legacy)
     assert client.post(f"{url}/initialize").json() == frames
     assert get_project(project_id)["frames"] == frames
-    assert client.post("/api/projects/missing/frames/initialize").status_code == 404
+    assert (
+        client.post("/photodream/api/projects/missing/frames/initialize").status_code
+        == 404
+    )
 
 
 def test_delete_frame_preserves_neighbors_cards_and_image_files(client, monkeypatch):
@@ -82,7 +85,7 @@ def test_delete_frame_preserves_neighbors_cards_and_image_files(client, monkeypa
     output = images.OUTPUT_DIR / "shared.png"
     output.write_bytes(b"shared image")
     card = client.post(
-        f"/api/projects/{project_id}/cards",
+        f"/photodream/api/projects/{project_id}/cards",
         data={"card_type": "character", "name": "主角", "content": "蓝衣"},
     ).json()["character_cards"][0]
     monkeypatch.setattr(
@@ -105,13 +108,16 @@ def test_delete_frame_preserves_neighbors_cards_and_image_files(client, monkeypa
     assert output.read_bytes() == b"shared image"
     assert client.post(f"{url}/{frames[1]['id']}", json={}).status_code == 404
     assert client.delete(f"{url}/{frames[1]['id']}").status_code == 404
-    assert client.delete("/api/projects/missing/frames/missing").status_code == 404
+    assert (
+        client.delete("/photodream/api/projects/missing/frames/missing").status_code
+        == 404
+    )
     assert client.post(f"{url}/initialize").json() == response.json()
 
 
 def test_delete_last_frame_stays_empty_until_user_adds_one(client):
-    project = client.post("/api/projects", data={"name": "空项目"}).json()
-    url = f"/api/projects/{project['id']}/frames"
+    project = client.post("/photodream/api/projects", data={"name": "空项目"}).json()
+    url = f"/photodream/api/projects/{project['id']}/frames"
     frame = client.post(f"{url}/initialize").json()[0]
     assert client.delete(f"{url}/{frame['id']}").json() == []
     assert client.get(url).json() == []
@@ -259,7 +265,7 @@ def test_apply_cards_and_generate_with_reference_images(client, monkeypatch):
         ("scene", "咖啡馆", "暖色光线、木桌"),
     ]:
         project = client.post(
-            f"/api/projects/{project_id}/cards",
+            f"/photodream/api/projects/{project_id}/cards",
             data={"card_type": card_type, "name": name, "content": description},
             files={"image": (f"{card_type}.png", image.getvalue(), "image/png")},
         ).json()

@@ -92,7 +92,7 @@ function saveSingleDraft(id) {
   const next = prior.catch(() => {}).then(async () => {
     const draft = singleDrafts.get(id); if (!draft) return;
     const body = JSON.stringify({ single_image_draft: draft });
-    const response = await fetch(`/api/projects/${id}/workspace`, { method: "POST", headers: { "Content-Type": "application/json" },
+    const response = await fetch(`/photodream/api/projects/${id}/workspace`, { method: "POST", headers: { "Content-Type": "application/json" },
       body, signal: AbortSignal.timeout(15000), keepalive: new Blob([body]).size < 60000 });
     if (!response.ok) throw new Error("草稿同步失败");
     const workspace = await response.json();
@@ -194,7 +194,7 @@ function renderCardList(container, cards, type) {
 
   container.innerHTML = cards.map((card) => {
     const thumbHtml = card.image_url
-      ? `<img class="card-chip__thumb" src="${escapeHtml(card.image_url)}" alt="${escapeHtml(card.name)}">`
+      ? `<img class="card-chip__thumb" src="${escapeHtml(Studio.asset(card.image_url))}" alt="${escapeHtml(card.name)}">`
       : "";
     return `
     <label class="card-chip">
@@ -239,7 +239,7 @@ function refillFromShot(shot) {
 
 async function downloadShot(shot) {
   try {
-    const resp = await fetch(shot.image_url);
+    const resp = await fetch(Studio.asset(shot.image_url));
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
@@ -259,8 +259,8 @@ async function downloadShot(shot) {
 function renderResult(shot) {
   els.resultEmpty.classList.add("is-hidden");
   els.resultCard.classList.remove("is-hidden");
-  els.resultImage.src = shot.image_url;
-  els.resultLink.href = shot.image_url;
+  els.resultImage.src = Studio.asset(shot.image_url);
+  els.resultLink.href = Studio.asset(shot.image_url);
   els.resultMeta.textContent = `第 ${shot.shot_number} 镜 / ${shot.mode} / ${shot.model} / ${shot.size}`;
   els.resultPrompt.textContent = `系统提示词：${shot.system_prompt || "（未填写）"}\n用户提示词：${shot.prompt || ""}`;
   els.resultComposedPrompt.textContent = `最终发送提示词：${shot.composed_prompt || ""}`;
@@ -275,7 +275,7 @@ function renderHistory(project) {
 
   els.historyList.innerHTML = shots.map((shot) => `
     <article class="history-item">
-      <img src="${escapeHtml(shot.image_url)}" alt="历史镜头">
+      <img src="${escapeHtml(Studio.asset(shot.image_url))}" alt="历史镜头">
       <div>
         <strong>第 ${shot.shot_number} 镜</strong>
         <p>${escapeHtml(shot.mode)} / ${escapeHtml(shot.model)} / ${escapeHtml(shot.size)}</p>
@@ -355,7 +355,7 @@ function updateReferencePreview() {
   for (const ref of cardRefs) {
     html += `
       <div class="ref-chip">
-        <img class="ref-chip__thumb" src="${escapeHtml(ref.url)}" alt="${escapeHtml(ref.label)}">
+        <img class="ref-chip__thumb" src="${escapeHtml(Studio.asset(ref.url))}" alt="${escapeHtml(ref.label)}">
         <span class="ref-chip__label">${escapeHtml(ref.label)}</span>
       </div>
     `;
@@ -378,7 +378,7 @@ function updateReferencePreview() {
 }
 
 async function loadConfig() {
-  const data = await Studio.cached("/api/config",600000);
+  const data = await Studio.cached("/photodream/api/config",600000);
   state.config = data;
   els.baseUrl.value = data.base_url || "https://api.hi-code.cc/v1";
   ImageSettings.init(data);
@@ -390,7 +390,7 @@ async function loadConfig() {
 
 async function loadProjects() {
   const previousSelection = collectSelectionSnapshot();
-  state.projects = await Studio.cached("/api/projects");
+  state.projects = await Studio.cached("/photodream/api/projects");
 
   if (!state.currentProjectId && state.projects.length) {
     const requested = initialProjectId;
@@ -441,7 +441,7 @@ async function ensureActiveProject() {
   const formData = new FormData();
   formData.append("name", name);
 
-  const response = await fetch("/api/projects", { method: "POST", body: formData });
+  const response = await fetch("/photodream/api/projects", { method: "POST", body: formData });
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.detail || "创建项目失败");
@@ -485,7 +485,7 @@ async function createCard(type) {
     formData.append("image", imageInput.files[0]);
   }
 
-  const response = await fetch(`/api/projects/${project.id}/cards`, { method: "POST", body: formData });
+  const response = await fetch(`/photodream/api/projects/${project.id}/cards`, { method: "POST", body: formData });
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.detail || "创建卡片失败");
@@ -537,7 +537,7 @@ async function submitForm(event) {
     const refFiles = Array.from(els.referenceImages.files || []);
     refFiles.forEach((file) => formData.append("reference_images", file));
 
-    const response = await fetch("/api/generate", { method: "POST", body: formData });
+    const response = await fetch("/photodream/api/generate", { method: "POST", body: formData });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.detail || "请求失败");
@@ -629,7 +629,7 @@ const ready = Promise.all([loadConfig(),loadProjects()]).then(restoreSingleDraft
 async function synchronizeProject() {
   const id = state.currentProjectId; if (!id) return;
   try {
-    const project = await Studio.api(`/api/projects/${id}`);
+    const project = await Studio.api(`/photodream/api/projects/${id}`);
     if (!active || state.currentProjectId !== id) return;
     const previous = currentProject(), selection = collectSelectionSnapshot();
     const changed = JSON.stringify([previous?.character_cards,previous?.scene_cards]) !== JSON.stringify([project.character_cards,project.scene_cards]);

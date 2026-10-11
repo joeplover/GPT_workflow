@@ -15,16 +15,16 @@ function tab(value) {
 }
 document.getElementById("loginTab").onclick = () => tab(false);
 document.getElementById("registerTab").onclick = () => tab(true);
-fetch("/api/auth/options").then(r => r.json()).then(options => { document.getElementById("registerTab").hidden = !options.registration_enabled; });
+fetch("/photodream/api/auth/options").then(r => r.json()).then(options => { document.getElementById("registerTab").hidden = !options.registration_enabled; });
 form.addEventListener("submit", async event => {
   event.preventDefault();
   const button = document.getElementById("authSubmit"); button.disabled = true;
   try {
-    const response = await fetch("/api/auth/" + (registering ? "register" : "login"), {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(Object.fromEntries(new FormData(form)))});
+    const response = await fetch("/photodream/api/auth/" + (registering ? "register" : "login"), {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(Object.fromEntries(new FormData(form)))});
     const data = await response.json();
     if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "请检查填写内容。");
-    let next = new URL(location.href).searchParams.get("next") || "/";
-    if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\") || /[\r\n]/.test(next)) next = "/";
+    let next = new URL(location.href).searchParams.get("next") || "/photodream/";
+    if (!next.startsWith("/photodream/") || next.includes("\\") || /[\r\n]/.test(next) || new URL(next, location.origin).pathname !== next.split(/[?#]/)[0]) next = "/photodream/";
     location.assign(next);
   } catch (error) { document.getElementById("authError").textContent = error.message; }
   finally { button.disabled = false; }

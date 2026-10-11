@@ -9,8 +9,10 @@ from web.routers import frames as routes
 
 
 def setup_project(client):
-    project = client.post("/api/projects", data={"name": "持久化测试"}).json()
-    url = f"/api/projects/{project['id']}"
+    project = client.post(
+        "/photodream/api/projects", data={"name": "持久化测试"}
+    ).json()
+    url = f"/photodream/api/projects/{project['id']}"
     frame = client.post(f"{url}/frames/initialize").json()[0]
     return project["id"], url, frame
 

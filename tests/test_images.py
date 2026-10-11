@@ -27,7 +27,7 @@ def test_generation_upload_edit_and_continuity(client, monkeypatch):
     monkeypatch.setattr(routes, "relay_generate_raw", relay)
     monkeypatch.setattr(routes, "relay_edit_raw", relay)
     response = client.post(
-        "/api/generate",
+        "/photodream/api/generate",
         data={
             "project_name": "图片测试",
             "prompt": "海边",
@@ -43,10 +43,10 @@ def test_generation_upload_edit_and_continuity(client, monkeypatch):
     assert calls[0]["prompt"].startswith("System instructions: 电影感")
     assert calls[0]["model"] == "my-custom-model"
     assert calls[0]["size"] == "1920x1080"
-    assert client.get(first["shot"]["image_url"]).content == png_bytes()
+    assert client.get("/photodream" + first["shot"]["image_url"]).content == png_bytes()
     project_id = first["project"]["id"]
     card = client.post(
-        f"/api/projects/{project_id}/cards",
+        f"/photodream/api/projects/{project_id}/cards",
         data={
             "card_type": "character",
             "name": "角色",
@@ -56,9 +56,9 @@ def test_generation_upload_edit_and_continuity(client, monkeypatch):
     )
     assert card.status_code == 200
     character = card.json()["character_cards"][0]
-    assert client.get(character["image_url"]).content == png_bytes()
+    assert client.get("/photodream" + character["image_url"]).content == png_bytes()
     response = client.post(
-        "/api/generate",
+        "/photodream/api/generate",
         data={
             "project_id": project_id,
             "prompt": "走向海边",
@@ -74,7 +74,7 @@ def test_generation_upload_edit_and_continuity(client, monkeypatch):
     with Image.open(calls[-1]["image_path"]) as collage:
         assert collage.size == (1536, 768)
     response = client.post(
-        "/api/generate",
+        "/photodream/api/generate",
         data={
             "project_id": project_id,
             "prompt": "下一镜",
@@ -84,7 +84,7 @@ def test_generation_upload_edit_and_continuity(client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["shot"]["mode"] == "continue"
     response = client.post(
-        "/api/edit",
+        "/photodream/api/edit",
         data={"project_id": project_id, "prompt": "修改天空"},
         files={
             "image": ("image.png", png_bytes(), "image/png"),
@@ -98,22 +98,34 @@ def test_generation_upload_edit_and_continuity(client, monkeypatch):
 
 
 def test_invalid_requests_and_upstream_errors(client, monkeypatch):
-    assert client.post("/api/generate", data={"prompt": " "}).status_code == 400
     assert (
-        client.post("/api/generate", data={"prompt": "test", "size": "bad"}).status_code
+        client.post("/photodream/api/generate", data={"prompt": " "}).status_code == 400
+    )
+    assert (
+        client.post(
+            "/photodream/api/generate", data={"prompt": "test", "size": "bad"}
+        ).status_code
         == 400
     )
-    assert client.post("/api/edit", data={"prompt": "test"}).status_code == 400
+    assert (
+        client.post("/photodream/api/edit", data={"prompt": "test"}).status_code == 400
+    )
     monkeypatch.setenv("HICODE_API_KEY", "")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    assert client.post("/api/generate", data={"prompt": "test"}).status_code == 400
+    assert (
+        client.post("/photodream/api/generate", data={"prompt": "test"}).status_code
+        == 400
+    )
     monkeypatch.setenv("HICODE_API_KEY", "test")
 
     def failing_relay(**kwargs):
         raise requests.Timeout("test timeout")
 
     monkeypatch.setattr(routes, "relay_generate_raw", failing_relay)
-    assert client.post("/api/generate", data={"prompt": "test"}).status_code == 502
+    assert (
+        client.post("/photodream/api/generate", data={"prompt": "test"}).status_code
+        == 502
+    )
 
 
 def test_relay_base64_persistence_and_session_cleanup(tmp_path, monkeypatch):

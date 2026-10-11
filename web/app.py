@@ -8,8 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
+from starlette._utils import get_route_path
 
-from .config import OUTPUT_DIR, RUNTIME_DIR, STATIC_DIR, UPLOAD_DIR
+from .config import APP_PREFIX, OUTPUT_DIR, RUNTIME_DIR, STATIC_DIR, UPLOAD_DIR
 from .database import dispose_database, initialize_database
 from .routers import auth, frames, images, management, projects, system
 from .security import COOKIE_NAME, current_actor, session_actor
@@ -30,12 +31,11 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title="Photo Dream Image Studio",
         description="FastAPI / PostgreSQL storyboard image platform",
-        lifespan=lifespan,
     )
 
     @application.middleware("http")
     async def authenticate(request: Request, call_next):
-        path = request.url.path
+        path = get_route_path(request.scope)
         public = path.startswith("/static/") or path in {
             "/login",
             "/api/health",
@@ -60,9 +60,11 @@ def create_app() -> FastAPI:
             from urllib.parse import quote
 
             return RedirectResponse(
-                "/login?next="
+                APP_PREFIX
+                + "/login?next="
                 + quote(
-                    path + ("?" + request.url.query if request.url.query else ""),
+                    request.url.path
+                    + ("?" + request.url.query if request.url.query else ""),
                     safe="",
                 ),
                 status_code=303,
@@ -101,10 +103,9 @@ def create_app() -> FastAPI:
 
         if Path(filename).name != filename or filename in {".", ".."}:
             raise HTTPException(404)
-        management.authorize_asset(request.url.path)
-        directory = (
-            OUTPUT_DIR if request.url.path.startswith("/outputs/") else UPLOAD_DIR
-        )
+        path = get_route_path(request.scope)
+        management.authorize_asset(path)
+        directory = OUTPUT_DIR if path.startswith("/outputs/") else UPLOAD_DIR
         file = directory / filename
         if not file.is_file() or file.resolve().parent != directory.resolve():
             raise HTTPException(404)
@@ -133,7 +134,19 @@ def create_app() -> FastAPI:
     def storyboard() -> FileResponse:
         return FileResponse(STATIC_DIR / "console.html")
 
-    return application
+    root = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
+    @root.get("/", include_in_schema=False)
+    def redirect_to_studio():
+        return RedirectResponse(APP_PREFIX + "/", status_code=307)
+
+    @root.get(APP_PREFIX, include_in_schema=False)
+    def canonical_studio_url(request: Request):
+        query = "?" + request.url.query if request.url.query else ""
+        return RedirectResponse(APP_PREFIX + "/" + query, status_code=307)
+
+    root.mount(APP_PREFIX, application)
+    return root
 
 
 app = create_app()

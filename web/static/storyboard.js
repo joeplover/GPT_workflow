@@ -55,7 +55,7 @@ function saveWorkspace(id) {
   const prior = state.workspaceSaves.get(id) || Promise.resolve();
   const next = prior.catch(() => {}).then(async () => {
     const draft = state.workspaceDrafts.get(id); if (!draft) return;
-    const saved = await jsonPost(`/api/projects/${id}/workspace`, draft, keepaliveOptions(draft));
+    const saved = await jsonPost(`/photodream/api/projects/${id}/workspace`, draft, keepaliveOptions(draft));
     if (state.project?.id === id) state.project.workspace = saved;
     if (state.workspaceDrafts.get(id) === draft) { state.workspaceDrafts.delete(id); removeLocal(`workspace:${id}`); }
   });
@@ -87,7 +87,7 @@ function referenceCards() {
     ...(state.project?.scene_cards || []).map((c) => ({ ...c, type: "scene" })) ];
 }
 function cardMarkup(card, checked, disabled = false) {
-  return `<label class="reference-card"><input type="checkbox" data-type="${card.type}" value="${escapeHtml(card.id)}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>${card.image_url ? `<img src="${escapeHtml(card.image_url)}" alt="">` : ""}<span>${escapeHtml(card.name)}<small>${card.type === "character" ? "角色参考" : "场景参考"}${card.image_url ? " · 含参考图" : " · 文字设定"}</small><small class="card-description">${escapeHtml(card.content)}</small></span></label>`;
+  return `<label class="reference-card"><input type="checkbox" data-type="${card.type}" value="${escapeHtml(card.id)}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>${card.image_url ? `<img src="${escapeHtml(Studio.asset(card.image_url))}" alt="">` : ""}<span>${escapeHtml(card.name)}<small>${card.type === "character" ? "角色参考" : "场景参考"}${card.image_url ? " · 含参考图" : " · 文字设定"}</small><small class="card-description">${escapeHtml(card.content)}</small></span></label>`;
 }
 function renderCards() {
   const frame = currentFrame();
@@ -139,7 +139,7 @@ function renderFilm() {
     deleteButton.disabled = markButton.disabled;
     deleteButton.setAttribute("aria-label", `删除第 ${index + 1} 镜，${item.title}`);
     deleteButton.title = "删除这个镜头";
-    const html = `<div class="frame-picture">${frame.image_url ? `<img src="${escapeHtml(frame.image_url)}" alt="${escapeHtml(item.title)}">` : `<span class="frame-placeholder">${String(index + 1).padStart(2, "0")}<small>填写提示词，让画面显影</small></span>`}${busy(frame) ? `<span class="frame-busy"><span class="spinner"></span><span>${status === "queued" ? "镜头排队中…" : "画面正在显影…"}</span></span>` : ""}</div><div class="frame-caption"><span>${String(index + 1).padStart(2, "0")} / ${escapeHtml(item.title)}</span><span class="frame-state">${labels[status] || status}</span></div>`;
+    const html = `<div class="frame-picture">${frame.image_url ? `<img src="${escapeHtml(Studio.asset(frame.image_url))}" alt="${escapeHtml(item.title)}">` : `<span class="frame-placeholder">${String(index + 1).padStart(2, "0")}<small>填写提示词，让画面显影</small></span>`}${busy(frame) ? `<span class="frame-busy"><span class="spinner"></span><span>${status === "queued" ? "镜头排队中…" : "画面正在显影…"}</span></span>` : ""}</div><div class="frame-caption"><span>${String(index + 1).padStart(2, "0")} / ${escapeHtml(item.title)}</span><span class="frame-state">${labels[status] || status}</span></div>`;
     if (selectButton.innerHTML !== html) selectButton.innerHTML = html;
   });
   layoutFilm();
@@ -153,14 +153,14 @@ function renderPreview() {
   $("previewStatus").dataset.state = status;
   $("previewEmpty").hidden = state.frames.length > 0;
   $("download").hidden = !frame?.image_url;
-  if (frame?.image_url) $("download").href = frame.image_url;
+  if (frame?.image_url) $("download").href = Studio.asset(frame.image_url);
   $("previousFrame").disabled = index <= 0;
   $("nextFrame").disabled = !frame || index >= state.frames.length - 1;
   $("selectedPosition").textContent = frame ? `${String(index + 1).padStart(2, "0")} / ${String(state.frames.length).padStart(2, "0")}` : "— / —";
   $("frameError").hidden = !frame?.error;
   $("frameError").textContent = frame?.error || "";
   $("versionsPanel").hidden = !frame?.versions?.length;
-  $("versionList").innerHTML = (frame?.versions || []).map((v, i) => `<a class="version-link" href="${escapeHtml(v.image_url)}" target="_blank" rel="noopener" title="${escapeHtml(v.prompt)}"><img src="${escapeHtml(v.image_url)}" alt="历史版本 ${i + 1}">版本 ${frame.versions.length - i}</a>`).join("");
+  $("versionList").innerHTML = (frame?.versions || []).map((v, i) => `<a class="version-link" href="${escapeHtml(Studio.asset(v.image_url))}" target="_blank" rel="noopener" title="${escapeHtml(v.prompt)}"><img src="${escapeHtml(Studio.asset(v.image_url))}" alt="历史版本 ${i + 1}">版本 ${frame.versions.length - i}</a>`).join("");
 }
 function renderEditor() {
   const frame = currentFrame(), item = frame ? content(frame) : {}, disabled = !frame || busy(frame) || state.applyingCards || Boolean(state.deletingFrame) || state.loadingProject;
@@ -257,7 +257,7 @@ function saveDraft(projectId, frameId) {
   const prior = state.saves.get(key) || Promise.resolve();
   const next = prior.catch(() => {}).then(async () => {
     const draft = state.drafts.get(key); if (!draft) return;
-    const saved = await jsonPost(`/api/projects/${projectId}/frames/${frameId}`, draft, keepaliveOptions(draft));
+    const saved = await jsonPost(`/photodream/api/projects/${projectId}/frames/${frameId}`, draft, keepaliveOptions(draft));
     applyFrame(projectId, saved); state.epoch++;
     if (state.drafts.get(key) === draft) { state.drafts.delete(key); removeLocal(`draft:${key}`); }
     if (state.project?.id === projectId) render();
@@ -289,12 +289,12 @@ async function runJob(job) {
   try {
     await saveDraft(job.projectId, job.frameId);
     job.status = "generating"; render();
-    const frame = await jsonPost(`/api/projects/${job.projectId}/frames/${job.frameId}/generate`, job.body);
+    const frame = await jsonPost(`/photodream/api/projects/${job.projectId}/frames/${job.frameId}/generate`, job.body);
     applyFrame(job.projectId, frame);
     message(`「${frame.title}」生成完成`);
   } catch (error) {
     try {
-      const frames = await api(`/api/projects/${job.projectId}/frames`);
+      const frames = await api(`/photodream/api/projects/${job.projectId}/frames`);
       const frame = frames.find((f) => f.id === job.frameId);
       if (frame) applyFrame(job.projectId, frame);
     } catch { /* Polling can recover after a temporary connection loss. */ }
@@ -346,7 +346,7 @@ $("operationPanel").addEventListener("toggle", async () => {
   Object.assign(names, {"project.metadata":"修改项目资料", "project.sharing":"修改项目共享", "project.legacy.claim":"分配历史项目归属", "cards.import":"导入资源卡片"});
   $("operationList").textContent = "加载中…";
   try {
-    const events = await api(`/api/projects/${projectId}/events?limit=20`);
+    const events = await api(`/photodream/api/projects/${projectId}/events?limit=20`);
     if (state.project?.id !== projectId) return;
     $("operationList").innerHTML = events.length ? events.map((event) => `<p>${escapeHtml(names[event.operation] || "保存修改")}<br><small>${escapeHtml(new Date(event.created_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }))}</small></p>`).join("") : "暂无操作记录。";
   } catch (error) { $("operationList").textContent = error.message; }
@@ -379,7 +379,7 @@ $("cardForm").addEventListener("submit", async (event) => {
   try {
     const form = new FormData(); form.append("card_type", state.cardType); form.append("name", name); form.append("content", description);
     if ($("cardImage").files[0]) form.append("image", $("cardImage").files[0]);
-    const project = await api(`/api/projects/${projectId}/cards`, { method: "POST", body: form });
+    const project = await api(`/photodream/api/projects/${projectId}/cards`, { method: "POST", body: form });
     if (state.project?.id === projectId) {
       state.project.character_cards = project.character_cards; state.project.scene_cards = project.scene_cards;
       const cards = project[`${state.cardType}_cards`]; state.librarySelection.add(cards[cards.length - 1].id);
@@ -407,7 +407,7 @@ $("confirmApply").addEventListener("click", async () => {
   state.applyingCards = true; state.epoch++; $("confirmApply").disabled = true; render();
   try {
     await Promise.all(frameIds.map((id) => saveDraft(projectId, id)));
-    const updated = await jsonPost(`/api/projects/${projectId}/frames/apply-cards`, payload);
+    const updated = await jsonPost(`/photodream/api/projects/${projectId}/frames/apply-cards`, payload);
     updated.forEach((frame) => applyFrame(projectId, frame)); state.epoch++;
     $("applyDialog").close(); message(`参考卡已应用到 ${updated.length} 个镜头，生成时会使用这些设定和参考图。`);
   } catch (error) { $("applyError").textContent = error.message; $("applyError").hidden = false; }
@@ -419,8 +419,8 @@ async function switchProject(id) {
   state.loadingProject = true; state.epoch++; render();
   const requested = ++switchProject.version;
   try {
-    const project = id ? await api(`/api/projects/${id}`) : null;
-    const frames = id ? await jsonPost(`/api/projects/${id}/frames/initialize`, {}) : [];
+    const project = id ? await api(`/photodream/api/projects/${id}`) : null;
+    const frames = id ? await jsonPost(`/photodream/api/projects/${id}/frames/initialize`, {}) : [];
     if (requested !== switchProject.version) return;
     state.project = project; state.frames = frames;
     $("operationPanel").open = false; $("operationList").textContent = "展开后加载。";
@@ -448,7 +448,7 @@ $("createProject").addEventListener("click", async () => {
   $("createProject").disabled = true;
   try {
     const form = new FormData(); form.append("name", name);
-    const project = await api("/api/projects", { method: "POST", body: form });
+    const project = await api("/photodream/api/projects", { method: "POST", body: form });
     state.projects.unshift(project); $("projectName").value = ""; await switchProject(project.id);
   } catch (error) { message(error.message, true); }
   finally { $("createProject").disabled = false; }
@@ -459,14 +459,14 @@ async function createBlankFrame() {
   try {
     if (!state.project) {
       const form = new FormData(); form.append("name", "分镜项目");
-      const project = await api("/api/projects", { method: "POST", body: form });
+      const project = await api("/photodream/api/projects", { method: "POST", body: form });
       state.projects.unshift(project); await switchProject(project.id);
       message("已创建项目和一个空白镜头。");
       return;
     }
     const projectId = state.project?.id;
     if (!projectId) throw new Error("项目加载失败，请重试。");
-    const frame = await jsonPost(`/api/projects/${projectId}/frames`, { prompt: "", model: state.config.default_model, size: state.config.default_size });
+    const frame = await jsonPost(`/photodream/api/projects/${projectId}/frames`, { prompt: "", model: state.config.default_model, size: state.config.default_size });
     state.epoch++;
     if (state.project?.id === projectId) {
       state.frames.push(frame); selectFrame(frame.id, true);
@@ -489,7 +489,7 @@ async function deleteFrame(frameId) {
   try {
     // Finish any in-flight autosave before removing the record.
     await (state.saves.get(key) || Promise.resolve()).catch(() => {});
-    const frames = await api(`/api/projects/${projectId}/frames/${frameId}`, { method: "DELETE" });
+    const frames = await api(`/photodream/api/projects/${projectId}/frames/${frameId}`, { method: "DELETE" });
     state.drafts.delete(key); state.saves.delete(key); removeLocal(`draft:${key}`); state.epoch++;
     if (state.project?.id === projectId) {
       const wasSelected = state.selectedId === frameId;
@@ -552,7 +552,7 @@ async function poll() {
   if (!active || polling || !state.project || state.loadingProject || state.creatingFrame || state.applyingCards || state.deletingFrame || document.hidden) return;
   polling = true; const projectId = state.project.id, epoch = state.epoch;
   try {
-    const frames = await api(`/api/projects/${projectId}/frames`);
+    const frames = await api(`/photodream/api/projects/${projectId}/frames`);
     if (state.project?.id !== projectId || state.epoch !== epoch || state.loadingProject || state.creatingFrame || state.applyingCards || state.deletingFrame) return;
     state.frames = frames; render(); $("connection").textContent = "已连接"; flushPending();
   } catch { $("connection").textContent = "连接中断，正在重试"; }
@@ -560,11 +560,11 @@ async function poll() {
 }
 async function init() {
   try {
-    const [config, projects] = await Promise.all([Studio.cached("/api/config", 600000), Studio.cached("/api/projects")]);
+    const [config, projects] = await Promise.all([Studio.cached("/photodream/api/config", 600000), Studio.cached("/photodream/api/projects")]);
     state.config = config; state.projects = projects;
     if (!state.projects.length) {
       const form = new FormData(); form.append("name", "分镜项目");
-      state.projects.push(await api("/api/projects", { method: "POST", body: form }));
+      state.projects.push(await api("/photodream/api/projects", { method: "POST", body: form }));
     }
     $("baseUrl").value = config.base_url;
     $("apiKey").placeholder = config.has_api_key ? "已配置服务端 Key，可留空" : "填写 API Key";
@@ -579,7 +579,7 @@ const ready = init(), pollTimer = setInterval(poll,2500);
 async function synchronizeProject() {
   const id = state.project?.id; if (!id) return;
   try {
-    const project = await api(`/api/projects/${id}`);
+    const project = await api(`/photodream/api/projects/${id}`);
     if (!active || state.project?.id !== id) return;
     state.project.character_cards = project.character_cards; state.project.scene_cards = project.scene_cards;
     state.project.name = project.name;
@@ -591,7 +591,7 @@ return {
   async activate(projectId) {
     active = true;
     if (projectId && projectId !== state.project?.id) {
-      state.projects = await Studio.api("/api/projects"); await switchProject(projectId);
+      state.projects = await Studio.api("/photodream/api/projects"); await switchProject(projectId);
     }
     if (!active) return;
     Studio.projectSelected(state.project?.id || "");

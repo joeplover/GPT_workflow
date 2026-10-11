@@ -65,7 +65,7 @@ def environment(tmp_path, monkeypatch):
 def client(environment):
     with TestClient(application.create_app()) as client:
         response = client.post(
-            "/api/auth/register",
+            "/photodream/api/auth/register",
             json={"username": "test_owner", "password": "test-password-123"},
         )
         assert response.status_code == 201, response.text

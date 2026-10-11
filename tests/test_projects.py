@@ -14,20 +14,20 @@ from web.services.storyboard import add_shot_to_project
 
 
 def test_project_cards_screenplay_and_health(client):
-    assert client.get("/").status_code == 200
-    assert client.get("/static/app.js").status_code == 200
-    assert client.get("/api/health").json() == {
+    assert client.get("/photodream/").status_code == 200
+    assert client.get("/photodream/static/app.js").status_code == 200
+    assert client.get("/photodream/api/health").json() == {
         "status": "ok",
         "database": "postgresql",
     }
-    assert "server-test-secret" not in client.get("/api/config").text
-    assert client.get("/api/config").json()["has_api_key"] is True
+    assert "server-test-secret" not in client.get("/photodream/api/config").text
+    assert client.get("/photodream/api/config").json()["has_api_key"] is True
     project = client.post(
-        "/api/projects", data={"name": "测试", "synopsis": "剧情"}
+        "/photodream/api/projects", data={"name": "测试", "synopsis": "剧情"}
     ).json()
     project_id = project["id"]
     response = client.post(
-        f"/api/projects/{project_id}/cards",
+        f"/photodream/api/projects/{project_id}/cards",
         data={
             "card_type": "character",
             "name": "人物",
@@ -37,15 +37,15 @@ def test_project_cards_screenplay_and_health(client):
     assert response.status_code == 200
     assert response.json()["character_cards"][0]["name"] == "人物"
     response = client.post(
-        f"/api/projects/{project_id}/screenplay",
+        f"/photodream/api/projects/{project_id}/screenplay",
         data={"screenplay_text": "1. 开门\n2. 出门"},
     )
     assert len(response.json()["shot_plan"]) == 2
-    assert len(client.get("/api/projects").json()) == 1
-    assert client.get("/api/projects/missing").status_code == 404
+    assert len(client.get("/photodream/api/projects").json()) == 1
+    assert client.get("/photodream/api/projects/missing").status_code == 404
     assert (
         client.post(
-            f"/api/projects/{project_id}/cards",
+            f"/photodream/api/projects/{project_id}/cards",
             data={
                 "card_type": "invalid",
                 "name": "人物",
@@ -83,7 +83,7 @@ def test_legacy_import_is_idempotent_and_preserves_database(environment):
     # Persistence survives application shutdown/restart.
     with TestClient(create_app()) as restarted:
         # Legacy projects remain private until explicitly assigned by local admin.
-        assert restarted.get("/api/projects/legacy").status_code == 401
+        assert restarted.get("/photodream/api/projects/legacy").status_code == 401
 
 
 def test_invalid_legacy_file_rolls_back_entire_import(environment):
@@ -122,7 +122,7 @@ def test_concurrent_cards_and_shots_are_not_lost(client, monkeypatch):
     def append(index):
         if index % 2:
             response = client.post(
-                f"/api/projects/{project['id']}/cards",
+                f"/photodream/api/projects/{project['id']}/cards",
                 data={
                     "card_type": "scene",
                     "name": f"场景{index}",

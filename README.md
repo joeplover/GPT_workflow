@@ -53,11 +53,13 @@ Windows：将 `.env.example` 复制为 `.env` 并配置后，执行 `start.bat`�
 venv\Scripts\python.exe -m uvicorn web.app:app --host 0.0.0.0 --port 8090 --reload --env-file .env
 ```
 
-页面：<http://127.0.0.1:8090>（未登录自动进入登录页）；API 文档：<http://127.0.0.1:8090/docs>（需登录）；数据库健康检查：`GET /api/health`。
+页面：<http://127.0.0.1:8090/photodream/>（未登录自动进入登录页）；API 文档：<http://127.0.0.1:8090/photodream/docs>（需登录）；数据库健康检查：`GET /photodream/api/health`。
 
 ## 创作中台、登录和团队
 
-首页 `/` 为统一管理中台，包含总览、项目管理、资源中心、团队空间、账号设置，以及管理员的用户管理。统一菜单还提供单图工作台 `/single` 和分镜工作台 `/storyboard`；项目卡片可直接打开对应项目的两个工作台。
+整个应用挂载到 `/photodream`，例如 `/photodream/login`、`/photodream/single`、`/photodream/storyboard`、`/photodream/api/health`、`/photodream/static/`。历史数据库中的图片路径保持 `/uploads/...`、`/outputs/...`，前端显示和下载时自动补上 `/photodream`，无需迁移图片记录。登录 Cookie 也限定在 `/photodream` 路径下。
+
+首页 `/photodream/` 为统一管理中台，包含总览、项目管理、资源中心、团队空间、账号设置，以及管理员的用户管理。统一菜单还提供单图工作台 `/photodream/single` 和分镜工作台 `/photodream/storyboard`；项目卡片可直接打开对应项目的两个工作台。
 
 中台与两个工作台共用固定导航、侧栏和页面内路由。菜单切换无需整页刷新，支持浏览器前进/后退和直接访问工作台地址；首次打开按需加载，后续切换复用已挂载的编辑器，保留当前项目、提示词、已选文件及滚动位置。配置请求共享缓存，返回工作台时后台同步项目资源。主动切换项目会恢复该项目的草稿，并清空临时文件选择；刷新整个页面后仍需重新选择本地文件。
 
@@ -69,7 +71,7 @@ venv/bin/python -m web.manage admin --claim-legacy
 
 密码由终端交互输入两次，至少 10 位，不存在默认密码。命令加载 `.env`，创建管理员并将尚无归属的历史项目分配给此账号；已有归属的项目不受影响，原始项目、分镜、卡片、图片和操作记录保留。不加 `--claim-legacy` 则只创建账号。普通网页注册不会取得历史项目或管理员权限。Windows 使用 `venv\Scripts\python.exe -m web.manage admin --claim-legacy`。容器部署可执行 `docker exec -it gpt_workflow python -m web.manage admin --claim-legacy`。
 
-用户默认只访问自己的个人项目和已加入团队的项目；系统管理员也不会自动获得其他用户的私人项目权限。后端对项目读写、分镜、生成、卡片、事件记录、诊断接口以及 `/uploads`、`/outputs` 图片文件统一检查权限。密码以加盐 scrypt 哈希存储；登录使用数据库中可撤销的会话和 HttpOnly / SameSite Cookie，持续 7 天。修改密码、管理员重置密码或停用账号会使会话失效。登录和注册按来源地址限制尝试次数。
+用户默认只访问自己的个人项目和已加入团队的项目；系统管理员也不会自动获得其他用户的私人项目权限。后端对项目读写、分镜、生成、卡片、事件记录、诊断接口以及 `/photodream/uploads`、`/photodream/outputs` 图片文件统一检查权限。密码以加盐 scrypt 哈希存储；登录使用数据库中可撤销的会话和 HttpOnly / SameSite Cookie，持续 7 天。修改密码、管理员重置密码或停用账号会使会话失效。登录和注册按来源地址限制尝试次数。
 
 项目管理支持创建、搜索、空间和归档筛选、修改名称/简介、归档/恢复、设置个人或团队共享。归档保留数据；团队成员可共同编辑项目，管理员/所有者可归档，只有团队所有者可把项目移出原团队。项目变更记录包含操作者 ID。浏览器草稿按用户 ID 分开存储。
 
@@ -105,9 +107,35 @@ docker run -d \
   gpt-workflow:latest
 ```
 
-可省略 `HICODE_API_KEY`，在页面填写请求所用的 Key。页面地址：<http://127.0.0.1:8000>。应用图片目录和 PostgreSQL 数据目录分别挂载，数据库文件不会写入应用容器。首次启动前可用 `docker exec gpt_workflow_postgres pg_isready -U workflow -d workflow` 检查数据库是否就绪。
+可省略 `HICODE_API_KEY`，在页面填写请求所用的 Key。页面地址：<http://127.0.0.1:8000/photodream/>。应用图片目录和 PostgreSQL 数据目录分别挂载，数据库文件不会写入应用容器。首次启动前可用 `docker exec gpt_workflow_postgres pg_isready -U workflow -d workflow` 检查数据库是否就绪。
 
 ## Docker Compose 部署
+
+### 同域名 Nginx / PM2 部署
+
+已有站点可以把本系统放在 `https://www.ploverjoe.xyz/photodream/`。应用直接运行在宿主机时，数据库连接使用 `127.0.0.1:5432`；使用 Python 3.12 的虚拟环境 `venv312`，由 PM2 守护：
+
+```bash
+pm2 start /opt/project/GPT_workflow/venv312/bin/python \
+  --name photo-dream --interpreter none \
+  --cwd /opt/project/GPT_workflow --kill-timeout 330000 \
+  -- -m uvicorn web.app:app --host 127.0.0.1 --port 3033 \
+  --env-file /opt/project/GPT_workflow/.env \
+  --proxy-headers --forwarded-allow-ips 127.0.0.1
+pm2 save
+```
+
+执行 `pm2 startup` 并按输出配置开机启动。将 [Nginx location 配置](deploy/nginx-photodream.conf) 加入已有 HTTPS `server` 块内部，保留原来其他服务的 location。`proxy_pass http://127.0.0.1:3033;` 后面不要加 `/`，Nginx 必须保留 `/photodream` 前缀；也不需要额外配置 Uvicorn `--root-path`。HTTPS 下设置 `.env` 的 `COOKIE_SECURE=true`，应用读取 `X-Forwarded-Proto` 以正确进行同源检查。
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+curl http://127.0.0.1:3033/photodream/api/health
+```
+
+代码更新后，等待生成请求完成再 `pm2 restart photo-dream`。浏览器首次升级刷新并重新登录；旧 Cookie 的根路径不再使用。
+
+### 新建数据库的 Compose 部署
 
 也可以在尚未用 docker run 启动同名容器时使用 Compose：
 
@@ -124,7 +152,7 @@ Compose 使用服务名 `postgres` 连接数据库，不使用 `.env` 中的本�
 
 ## 胶片分镜工作台
 
-访问 `/storyboard`（旧页面顶部也有入口）。没有项目时自动创建默认项目；首次打开没有镜头的项目，初始化一个空白镜头。已有项目保留原来的镜头数量和内容。之后由用户点击胶片区域末尾的「＋ 新建分镜」添加镜头，无须输入或确认。胶片与大图预览合并为横向画廊，中央镜头放大、两侧镜头缩小并部分露出；支持横向滚动、触控、左右方向键和点击选中。
+访问 `/photodream/storyboard`（旧页面顶部也有入口）。没有项目时自动创建默认项目；首次打开没有镜头的项目，初始化一个空白镜头。已有项目保留原来的镜头数量和内容。之后由用户点击胶片区域末尾的「＋ 新建分镜」添加镜头，无须输入或确认。胶片与大图预览合并为横向画廊，中央镜头放大、两侧镜头缩小并部分露出；支持横向滚动、触控、左右方向键和点击选中。
 
 点击胶片左上角的「×」或编辑区的「删除这个镜头」，确认后删除该镜头及其历史记录，其他镜头与参考卡不受影响。删除当前镜头后选中相邻镜头；正在生成的镜头暂不可删除。允许删除最后一个镜头，刷新或重新打开项目不会自动补回，之后由用户手动添加。删除镜头保留图片文件，避免影响其他引用。
 
@@ -134,9 +162,9 @@ Compose 使用服务名 `postgres` 连接数据库，不使用 `.env` 中的本�
 
 生成请求在 FastAPI 工作线程执行，页面一次提交已标记镜头的请求。已经提交的请求通常在关闭页面后继续在服务端执行，可重新打开页面查看状态。生成期间不持有数据库锁；API Key 只用于请求，不保存在镜头记录中。
 
-新增接口：`GET/POST /api/projects/{project_id}/frames`、`POST /api/projects/{project_id}/frames/initialize` 幂等初始化、`POST /api/projects/{project_id}/frames/{frame_id}` 保存镜头、`DELETE /api/projects/{project_id}/frames/{frame_id}` 删除镜头、`POST /api/projects/{project_id}/frames/{frame_id}/generate` 生成镜头。镜头记录保存在项目 JSONB 的 `frames` 字段，`frames_initialized` 标记防止删除后自动补回，无须新建数据表。
+新增接口：`GET/POST /photodream/api/projects/{project_id}/frames`、`POST /photodream/api/projects/{project_id}/frames/initialize` 幂等初始化、`POST /photodream/api/projects/{project_id}/frames/{frame_id}` 保存镜头、`DELETE /photodream/api/projects/{project_id}/frames/{frame_id}` 删除镜头、`POST /photodream/api/projects/{project_id}/frames/{frame_id}/generate` 生成镜头。镜头记录保存在项目 JSONB 的 `frames` 字段，`frames_initialized` 标记防止删除后自动补回，无须新建数据表。
 
-分镜工作台左侧可直接创建角色卡 / 场景卡，填写设定并上传参考图。参考卡库支持多选、全选、清空；点击「应用到镜头」后多选目标镜头或全选，将这些镜头的卡片选择统一替换为所选参考卡。每个镜头的编辑区也可以独立多选、全选或清空参考卡，选择自动保存。生成时将卡片设定合入提示词，带图片的卡片会拼成参考图交给图片编辑接口，并要求保持人物外貌和服装一致。批量应用接口为 `POST /api/projects/{project_id}/frames/apply-cards`，在单个事务内验证卡片和目标镜头后保存；生成中的镜头暂不可修改。
+分镜工作台左侧可直接创建角色卡 / 场景卡，填写设定并上传参考图。参考卡库支持多选、全选、清空；点击「应用到镜头」后多选目标镜头或全选，将这些镜头的卡片选择统一替换为所选参考卡。每个镜头的编辑区也可以独立多选、全选或清空参考卡，选择自动保存。生成时将卡片设定合入提示词，带图片的卡片会拼成参考图交给图片编辑接口，并要求保持人物外貌和服装一致。批量应用接口为 `POST /photodream/api/projects/{project_id}/frames/apply-cards`，在单个事务内验证卡片和目标镜头后保存；生成中的镜头暂不可修改。
 
 可选浏览器验证（需要 `/usr/bin/google-chrome` 和 `pip install playwright`）：`TEST_DATABASE_URL=postgresql+psycopg://用户:密码@127.0.0.1:5432/测试库 venv/bin/python -m pytest tests/test_console_browser.py -q`。自动启动隔离的本地服务，以模拟图片接口验证标记后统一生成/更新、失败重试、单镜头重新生成、自动保存、胶片滑动，以及真实注册、项目管理、团队共享和资源导入流程，不消耗 API 额度。测试只在临时 schema 内创建数据。
 
@@ -150,7 +178,7 @@ Compose 使用服务名 `postgres` 连接数据库，不使用 `.env` 中的本�
 
 输入时先写入浏览器本地草稿，再请求数据库。保存失败保留本地副本并自动重试；刷新后恢复草稿并补传。只有收到数据库成功响应才清除对应草稿。未创建项目的单图草稿暂存在本机，创建项目后转存数据库。API Key 不写入浏览器缓存、项目或操作记录；尚未提交上传的文件不会恢复，需要重新选择。
 
-`project_events` 表记录本次功能启用后的创建、修改、删除、生成和状态变更，保存修改前后的内容，与项目更新在同一个事务中提交或回滚；重复保存且内容不变时不新增记录。删除的镜头完整内容以及历史版本的变化仍可在记录中追溯。不会补录过去的操作。侧栏「操作记录」展示最近记录；完整内容通过 `GET /api/projects/{project_id}/events?limit=50` 查看，使用返回的最后一个 `id` 作为 `before` 参数向前翻页。工作区保存接口为 `POST /api/projects/{project_id}/workspace`。
+`project_events` 表记录本次功能启用后的创建、修改、删除、生成和状态变更，保存修改前后的内容，与项目更新在同一个事务中提交或回滚；重复保存且内容不变时不新增记录。删除的镜头完整内容以及历史版本的变化仍可在记录中追溯。不会补录过去的操作。侧栏「操作记录」展示最近记录；完整内容通过 `GET /photodream/api/projects/{project_id}/events?limit=50` 查看，使用返回的最后一个 `id` 作为 `before` 参数向前翻页。工作区保存接口为 `POST /photodream/api/projects/{project_id}/workspace`。
 
 数据库落盘和本地草稿不能替代备份。数据库和图片目录需要一起备份，并将备份复制到其他磁盘或服务器；本地草稿只存在于当前浏览器，离线时必须恢复同步后才能在另一台设备看到。不要清理浏览器数据或删除 `web/runtime` 来排查保存问题。
 

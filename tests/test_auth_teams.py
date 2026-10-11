@@ -11,7 +11,7 @@ from web.models import Project, User, UserSession
 
 def signup(client, username):
     result = client.post(
-        "/api/auth/register",
+        "/photodream/api/auth/register",
         json={
             "username": username,
             "password": "strong-password-123",
@@ -23,29 +23,31 @@ def signup(client, username):
 
 
 def create_project(client, name="私有项目", team_id=""):
-    result = client.post("/api/projects", data={"name": name, "team_id": team_id})
+    result = client.post(
+        "/photodream/api/projects", data={"name": name, "team_id": team_id}
+    )
     assert result.status_code == 200, result.text
     return result.json()
 
 
 def test_login_logout_password_and_csrf(environment):
     with TestClient(create_app()) as client:
-        assert client.get("/", follow_redirects=False).status_code == 303
-        assert client.get("/api/projects").status_code == 401
-        assert client.get("/outputs/unknown.png").status_code == 401
-        assert client.get("/login").status_code == 200
+        assert client.get("/photodream/", follow_redirects=False).status_code == 303
+        assert client.get("/photodream/api/projects").status_code == 401
+        assert client.get("/photodream/outputs/unknown.png").status_code == 401
+        assert client.get("/photodream/login").status_code == 200
         user = signup(client, "alice")
         assert user["is_admin"] is False
         cookie = client.cookies.get("workflow_session")
         assert len(cookie) >= 40
-        assert client.get("/api/auth/me").json()["id"] == user["id"]
+        assert client.get("/photodream/api/auth/me").json()["id"] == user["id"]
         with Session(environment[1]) as session:
             stored = session.get(User, user["id"])
             assert stored.password_hash != "strong-password-123"
             assert session.scalar(select(UserSession.token_hash)) != cookie
         assert (
             client.post(
-                "/api/auth/profile",
+                "/photodream/api/auth/profile",
                 json={"display_name": "新名字"},
                 headers={"Origin": "https://evil.example"},
             ).status_code
@@ -53,21 +55,21 @@ def test_login_logout_password_and_csrf(environment):
         )
         assert (
             client.post(
-                "/api/projects",
+                "/photodream/api/projects",
                 data={"name": "evil"},
                 headers={"Sec-Fetch-Site": "cross-site"},
             ).status_code
             == 403
         )
         assert (
-            client.post("/api/auth/profile", json={"display_name": "新名字"}).json()[
-                "display_name"
-            ]
+            client.post(
+                "/photodream/api/auth/profile", json={"display_name": "新名字"}
+            ).json()["display_name"]
             == "新名字"
         )
         assert (
             client.post(
-                "/api/auth/password",
+                "/photodream/api/auth/password",
                 json={
                     "current_password": "wrong",
                     "new_password": "another-password-123",
@@ -77,7 +79,7 @@ def test_login_logout_password_and_csrf(environment):
         )
         assert (
             client.post(
-                "/api/auth/password",
+                "/photodream/api/auth/password",
                 json={
                     "current_password": "strong-password-123",
                     "new_password": "another-password-123",
@@ -85,26 +87,26 @@ def test_login_logout_password_and_csrf(environment):
             ).status_code
             == 200
         )
-        assert client.get("/api/projects").status_code == 401
+        assert client.get("/photodream/api/projects").status_code == 401
         assert (
             client.post(
-                "/api/auth/login",
+                "/photodream/api/auth/login",
                 json={"username": "alice", "password": "strong-password-123"},
             ).status_code
             == 401
         )
         login = client.post(
-            "/api/auth/login",
+            "/photodream/api/auth/login",
             json={"username": "alice", "password": "another-password-123"},
         )
         assert login.status_code == 200
         assert "HttpOnly" in login.headers["set-cookie"]
-        assert client.get("/").status_code == 200
-        assert client.get("/single").status_code == 200
-        assert client.get("/storyboard").status_code == 200
-        assert client.post("/api/auth/logout").status_code == 200
+        assert client.get("/photodream/").status_code == 200
+        assert client.get("/photodream/single").status_code == 200
+        assert client.get("/photodream/storyboard").status_code == 200
+        assert client.post("/photodream/api/auth/logout").status_code == 200
         client.cookies.set("workflow_session", cookie)
-        assert client.get("/api/auth/me").status_code == 401
+        assert client.get("/photodream/api/auth/me").status_code == 401
 
 
 def test_personal_project_isolation_and_protected_assets(environment):
@@ -113,16 +115,16 @@ def test_personal_project_isolation_and_protected_assets(environment):
         signup(bob, "bob")
         p = create_project(alice)
         assert p["owner_id"] == a["id"] and p["team_id"] is None
-        root = f"/api/projects/{p['id']}"
+        root = f"/photodream/api/projects/{p['id']}"
         frame = alice.post(root + "/frames", json={"prompt": "私人提示词"}).json()
         card = alice.post(
             root + "/cards",
             data={"card_type": "character", "name": "私人角色", "content": "私人设定"},
             files={"image": ("private.png", b"test-image", "image/png")},
         ).json()["character_cards"][0]
-        assert alice.get(card["image_url"]).content == b"test-image"
-        assert bob.get("/api/projects").json() == []
-        assert bob.get("/api/resources").json() == []
+        assert alice.get("/photodream" + card["image_url"]).content == b"test-image"
+        assert bob.get("/photodream/api/projects").json() == []
+        assert bob.get("/photodream/api/resources").json() == []
         assert bob.get(root).status_code == 404
         assert bob.get(root + "/events").status_code == 404
         assert bob.get(root + "/frames").status_code == 404
@@ -136,30 +138,33 @@ def test_personal_project_isolation_and_protected_assets(environment):
         )
         assert bob.delete(root + f"/frames/{frame['id']}").status_code == 404
         assert bob.post(root + "/sharing", json={"team_id": None}).status_code == 404
-        assert bob.get(card["image_url"]).status_code == 404
+        assert bob.get("/photodream" + card["image_url"]).status_code == 404
         # Writing a known URL into a prompt must never grant file access.
         forged = create_project(bob, "伪造引用")
         bob.post(
-            f"/api/projects/{forged['id']}/frames", json={"prompt": card["image_url"]}
+            f"/photodream/api/projects/{forged['id']}/frames",
+            json={"prompt": card["image_url"]},
         )
         bob.post(
-            f"/api/projects/{forged['id']}/cards",
+            f"/photodream/api/projects/{forged['id']}/cards",
             data={"card_type": "scene", "name": "伪造", "content": card["image_url"]},
         )
-        assert bob.get(card["image_url"]).status_code == 404
+        assert bob.get("/photodream" + card["image_url"]).status_code == 404
         assert (
-            bob.get("/api/debug/state", params={"project_id": p["id"]}).status_code
+            bob.get(
+                "/photodream/api/debug/state", params={"project_id": p["id"]}
+            ).status_code
             == 404
         )
-        assert "upload_files" not in bob.get("/api/debug/state").json()
+        assert "upload_files" not in bob.get("/photodream/api/debug/state").json()
         assert alice.get(root).json()["frames"][0]["prompt"] == "私人提示词"
         assert alice.get(root + "/events").json()[0]["actor_id"] == a["id"]
         with Session(environment[1]) as session, session.begin():
             session.add(
                 Project(id="unowned", document={"id": "unowned", "name": "历史项目"})
             )
-        assert alice.get("/api/projects/unowned").status_code == 404
-        assert bob.get("/api/projects/unowned").status_code == 404
+        assert alice.get("/photodream/api/projects/unowned").status_code == 404
+        assert bob.get("/photodream/api/projects/unowned").status_code == 404
 
 
 def test_team_sharing_roles_invites_and_immediate_revocation(environment):
@@ -171,33 +176,37 @@ def test_team_sharing_roles_invites_and_immediate_revocation(environment):
         a = signup(alice, "alice")
         b = signup(bob, "bob")
         signup(charlie, "charlie")
-        team = alice.post("/api/teams", json={"name": "创作组"}).json()
-        t = f"/api/teams/{team['id']}"
+        team = alice.post("/photodream/api/teams", json={"name": "创作组"}).json()
+        t = f"/photodream/api/teams/{team['id']}"
         assert bob.get(t + "/members").status_code == 404
         invite = alice.post(t + "/invites").json()
         assert (
-            bob.post("/api/teams/join", json={"token": invite["token"]}).status_code
+            bob.post(
+                "/photodream/api/teams/join", json={"token": invite["token"]}
+            ).status_code
             == 200
         )
         assert (
-            charlie.post("/api/teams/join", json={"token": invite["token"]}).status_code
+            charlie.post(
+                "/photodream/api/teams/join", json={"token": invite["token"]}
+            ).status_code
             == 400
         )
-        assert bob.get("/api/teams").json()[0]["role"] == "member"
+        assert bob.get("/photodream/api/teams").json()[0]["role"] == "member"
         assert bob.post(t + "/invites").status_code == 403
         assert bob.post(t + "/name", json={"name": "hacked"}).status_code == 403
         p = create_project(bob, "共享项目", team["id"])
-        root = f"/api/projects/{p['id']}"
+        root = f"/photodream/api/projects/{p['id']}"
         card = bob.post(
             root + "/cards",
             data={"card_type": "scene", "name": "共享场景", "content": "雨夜"},
             files={"image": ("scene.png", b"shared-image", "image/png")},
         ).json()["scene_cards"][0]
         assert alice.get(root).status_code == 200
-        assert alice.get(card["image_url"]).content == b"shared-image"
+        assert alice.get("/photodream" + card["image_url"]).content == b"shared-image"
         assert charlie.get(root).status_code == 404
-        assert charlie.get(card["image_url"]).status_code == 404
-        assert alice.get("/api/resources").json()[0]["name"] == "共享场景"
+        assert charlie.get("/photodream" + card["image_url"]).status_code == 404
+        assert alice.get("/photodream/api/resources").json()[0]["name"] == "共享场景"
         assert bob.post(root + "/sharing", json={"team_id": None}).status_code == 403
         assert bob.post(root + "/metadata", json={"archived": True}).status_code == 403
         assert (
@@ -226,8 +235,8 @@ def test_team_sharing_roles_invites_and_immediate_revocation(environment):
         assert alice.delete(t + f"/members/{b['id']}").status_code == 200
         # The original creator also loses access after leaving the team.
         assert bob.get(root).status_code == 404
-        assert bob.get(card["image_url"]).status_code == 404
-        assert bob.get("/api/resources").json() == []
+        assert bob.get("/photodream" + card["image_url"]).status_code == 404
+        assert bob.get("/photodream/api/resources").json() == []
         assert alice.get(root).status_code == 200
         assert alice.post(root + "/sharing", json={"team_id": None}).status_code == 200
         assert alice.get(root).json()["owner_id"] == a["id"]
@@ -240,7 +249,7 @@ def test_resource_import_checks_both_projects_and_keeps_copy(environment):
         source = create_project(alice, "来源")
         target = create_project(alice, "目标")
         card = alice.post(
-            f"/api/projects/{source['id']}/cards",
+            f"/photodream/api/projects/{source['id']}/cards",
             data={"card_type": "character", "name": "主角", "content": "蓝色外套"},
             files={"image": ("a.png", b"image", "image/png")},
         ).json()["character_cards"][0]
@@ -251,24 +260,28 @@ def test_resource_import_checks_both_projects_and_keeps_copy(environment):
         }
         assert (
             bob.post(
-                f"/api/projects/{target['id']}/resources/import", json=payload
+                f"/photodream/api/projects/{target['id']}/resources/import",
+                json=payload,
             ).status_code
             == 404
         )
         imported = alice.post(
-            f"/api/projects/{target['id']}/resources/import", json=payload
+            f"/photodream/api/projects/{target['id']}/resources/import", json=payload
         )
         assert imported.status_code == 200
         assert imported.json()["character_cards"][0]["id"] != card["id"]
         assert imported.json()["character_cards"][0]["image_url"] == card["image_url"]
-        team = alice.post("/api/teams", json={"name": "共享目标"}).json()
-        token = alice.post(f"/api/teams/{team['id']}/invites").json()["token"]
-        bob.post("/api/teams/join", json={"token": token})
+        team = alice.post("/photodream/api/teams", json={"name": "共享目标"}).json()
+        token = alice.post(f"/photodream/api/teams/{team['id']}/invites").json()[
+            "token"
+        ]
+        bob.post("/photodream/api/teams/join", json={"token": token})
         alice.post(
-            f"/api/projects/{target['id']}/sharing", json={"team_id": team["id"]}
+            f"/photodream/api/projects/{target['id']}/sharing",
+            json={"team_id": team["id"]},
         )
-        assert bob.get(card["image_url"]).status_code == 200
-        assert bob.get(f"/api/projects/{source['id']}").status_code == 404
+        assert bob.get("/photodream" + card["image_url"]).status_code == 200
+        assert bob.get(f"/photodream/api/projects/{source['id']}").status_code == 404
 
 
 def test_registration_switch_rate_limit_and_admin(environment, monkeypatch):
@@ -276,7 +289,7 @@ def test_registration_switch_rate_limit_and_admin(environment, monkeypatch):
         monkeypatch.setenv("ALLOW_REGISTRATION", "false")
         assert (
             client.post(
-                "/api/auth/register",
+                "/photodream/api/auth/register",
                 json={"username": "alice", "password": "strong-password-123"},
             ).status_code
             == 403
@@ -284,23 +297,27 @@ def test_registration_switch_rate_limit_and_admin(environment, monkeypatch):
         monkeypatch.setenv("ALLOW_REGISTRATION", "true")
         assert (
             client.post(
-                "/api/auth/register", json={"username": "alice", "password": "short"}
+                "/photodream/api/auth/register",
+                json={"username": "alice", "password": "short"},
             ).status_code
             == 400
         )
         user = signup(client, "alice")
-        assert client.get("/api/admin/users").status_code == 403
+        assert client.get("/photodream/api/admin/users").status_code == 403
         with Session(environment[1]) as session, session.begin():
             session.get(User, user["id"]).is_admin = True
-        assert client.get("/api/admin/users").json()[0]["username"] == "alice"
-        client.post("/api/auth/logout")
+        assert (
+            client.get("/photodream/api/admin/users").json()[0]["username"] == "alice"
+        )
+        client.post("/photodream/api/auth/logout")
         for _ in range(19):
             client.post(
-                "/api/auth/login", json={"username": "missing", "password": "wrong"}
+                "/photodream/api/auth/login",
+                json={"username": "missing", "password": "wrong"},
             )
         assert (
             client.post(
-                "/api/auth/login",
+                "/photodream/api/auth/login",
                 json={"username": "alice", "password": "strong-password-123"},
             ).status_code
             == 429
@@ -337,21 +354,22 @@ def test_admin_account_maintenance_revokes_sessions(environment):
         u = signup(user, "member")
         with Session(environment[1]) as session, session.begin():
             session.get(User, a["id"]).is_admin = True
-        root = f"/api/admin/users/{u['id']}"
+        root = f"/photodream/api/admin/users/{u['id']}"
         assert user.post(root + "/status", json={"is_active": False}).status_code == 403
         assert (
             admin.post(
-                f"/api/admin/users/{a['id']}/status", json={"is_active": False}
+                f"/photodream/api/admin/users/{a['id']}/status",
+                json={"is_active": False},
             ).status_code
             == 400
         )
         assert (
             admin.post(root + "/status", json={"is_active": False}).status_code == 200
         )
-        assert user.get("/api/auth/me").status_code == 401
+        assert user.get("/photodream/api/auth/me").status_code == 401
         assert (
             user.post(
-                "/api/auth/login",
+                "/photodream/api/auth/login",
                 json={"username": "member", "password": "strong-password-123"},
             ).status_code
             == 401
@@ -365,40 +383,40 @@ def test_admin_account_maintenance_revokes_sessions(environment):
         )
         assert (
             user.post(
-                "/api/auth/login",
+                "/photodream/api/auth/login",
                 json={"username": "member", "password": "strong-password-123"},
             ).status_code
             == 401
         )
         assert (
             user.post(
-                "/api/auth/login",
+                "/photodream/api/auth/login",
                 json={"username": "member", "password": "reset-password-123"},
             ).status_code
             == 200
         )
         private = create_project(user)
-        assert admin.get(f"/api/projects/{private['id']}").status_code == 404
+        assert admin.get(f"/photodream/api/projects/{private['id']}").status_code == 404
         created = admin.post(
-            "/api/admin/users",
+            "/photodream/api/admin/users",
             json={"username": "new_member", "password": "new-password-123"},
         )
         assert created.status_code == 201
         assert (
             admin.post(
-                "/api/admin/users",
+                "/photodream/api/admin/users",
                 json={"username": "new_member", "password": "new-password-123"},
             ).status_code
             == 409
         )
         assert (
             user.post(
-                "/api/auth/login",
+                "/photodream/api/auth/login",
                 json={"username": "new_member", "password": "new-password-123"},
             ).status_code
             == 200
         )
-        assert user.get("/api/auth/me").json()["is_admin"] is False
+        assert user.get("/photodream/api/auth/me").json()["is_admin"] is False
 
 
 def test_local_admin_initialization_claims_only_unowned_projects(
