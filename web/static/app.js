@@ -1,48 +1,116 @@
-﻿const state = {
+export function mount(root, Studio, ImageSettings, initialProjectId = "") {
+let active = false;
+const lifetime = new AbortController();
+function listen(target, type, listener) { target.addEventListener(type, listener, {signal:lifetime.signal}); }
+const state = {
   config: null,
   projects: [],
   currentProjectId: "",
 };
 
 const els = {
-  submitBtn: document.getElementById("submitBtn"),
-  submitStatus: document.getElementById("submitStatus"),
-  configStatus: document.getElementById("configStatus"),
-  apiKey: document.getElementById("apiKey"),
-  baseUrl: document.getElementById("baseUrl"),
-  projectSelect: document.getElementById("projectSelect"),
-  projectName: document.getElementById("projectName"),
-  characterName: document.getElementById("characterName"),
-  characterContent: document.getElementById("characterContent"),
-  characterImage: document.getElementById("characterImage"),
-  characterImageText: document.getElementById("characterImageText"),
-  sceneName: document.getElementById("sceneName"),
-  sceneContent: document.getElementById("sceneContent"),
-  sceneImage: document.getElementById("sceneImage"),
-  sceneImageText: document.getElementById("sceneImageText"),
-  addCharacterCardBtn: document.getElementById("addCharacterCardBtn"),
-  addSceneCardBtn: document.getElementById("addSceneCardBtn"),
-  characterCardList: document.getElementById("characterCardList"),
-  sceneCardList: document.getElementById("sceneCardList"),
-  prompt: document.getElementById("prompt"),
-  referenceImages: document.getElementById("referenceImages"),
-  referenceImagesText: document.getElementById("referenceImagesText"),
-  referencePreview: document.getElementById("referencePreview"),
-  model: document.getElementById("model"),
-  size: document.getElementById("size"),
-  resultEmpty: document.getElementById("resultEmpty"),
-  resultCard: document.getElementById("resultCard"),
-  resultImage: document.getElementById("resultImage"),
-  resultMeta: document.getElementById("resultMeta"),
-  resultPrompt: document.getElementById("resultPrompt"),
-  resultComposedPrompt: document.getElementById("resultComposedPrompt"),
-  resultLink: document.getElementById("resultLink"),
-  historyList: document.getElementById("historyList"),
+  submitBtn: root.getElementById("submitBtn"),
+  submitStatus: root.getElementById("submitStatus"),
+  configStatus: root.getElementById("configStatus"),
+  apiKey: root.getElementById("apiKey"),
+  baseUrl: root.getElementById("baseUrl"),
+  projectSelect: root.getElementById("projectSelect"),
+  projectName: root.getElementById("projectName"),
+  characterName: root.getElementById("characterName"),
+  characterContent: root.getElementById("characterContent"),
+  characterImage: root.getElementById("characterImage"),
+  characterImageText: root.getElementById("characterImageText"),
+  sceneName: root.getElementById("sceneName"),
+  sceneContent: root.getElementById("sceneContent"),
+  sceneImage: root.getElementById("sceneImage"),
+  sceneImageText: root.getElementById("sceneImageText"),
+  addCharacterCardBtn: root.getElementById("addCharacterCardBtn"),
+  addSceneCardBtn: root.getElementById("addSceneCardBtn"),
+  characterCardList: root.getElementById("characterCardList"),
+  sceneCardList: root.getElementById("sceneCardList"),
+  prompt: root.getElementById("prompt"),
+  systemPrompt: root.getElementById("systemPrompt"),
+  referenceImages: root.getElementById("referenceImages"),
+  referenceImagesText: root.getElementById("referenceImagesText"),
+  referencePreview: root.getElementById("referencePreview"),
+  model: root.getElementById("model"),
+  size: root.getElementById("size"),
+  resultEmpty: root.getElementById("resultEmpty"),
+  resultCard: root.getElementById("resultCard"),
+  resultImage: root.getElementById("resultImage"),
+  resultMeta: root.getElementById("resultMeta"),
+  resultPrompt: root.getElementById("resultPrompt"),
+  resultComposedPrompt: root.getElementById("resultComposedPrompt"),
+  resultLink: root.getElementById("resultLink"),
+  historyList: root.getElementById("historyList"),
 };
 
 function setStatus(text) {
   els.submitStatus.textContent = text;
 }
+
+let singleDraftPrefix = "workflow.single.v2:";
+const singleDrafts = new Map(), singleSaves = new Map(), singleTimers = new Map();
+function readSingleDraft(key) { try { return JSON.parse(localStorage.getItem(singleDraftPrefix + key) || "null"); } catch { return null; } }
+function writeSingleDraft(key, draft) { try { localStorage.setItem(singleDraftPrefix + key, JSON.stringify(draft)); } catch { setStatus("无法保存本地草稿，请等待数据库同步后再关闭页面。"); } }
+function captureSingleDraft() {
+  return { prompt: els.prompt.value, system_prompt: els.systemPrompt.value, model: els.model.value, size: els.size.value,
+    project_name: els.projectName.value, character_card_ids: selectedCardIds("character"), scene_card_ids: selectedCardIds("scene"),
+    character_name: els.characterName.value, character_content: els.characterContent.value, scene_name: els.sceneName.value, scene_content: els.sceneContent.value };
+}
+function rememberSingleDraft() {
+  const id = state.currentProjectId || "new", draft = captureSingleDraft();
+  singleDrafts.set(id, draft); writeSingleDraft(id, draft);
+  clearTimeout(singleTimers.get(id));
+  if (id !== "new") singleTimers.set(id, setTimeout(() => saveSingleDraft(id).catch(() => {}), 400));
+}
+function restoreSingleDraft() {
+  const id = state.currentProjectId || "new", local = readSingleDraft(id), draft = local || currentProject()?.workspace?.single_image_draft;
+  if (!draft) return;
+  for (const [element, field] of [[els.prompt, "prompt"], [els.systemPrompt, "system_prompt"], [els.model, "model"], [els.size, "size"],
+    [els.projectName, "project_name"], [els.characterName, "character_name"], [els.characterContent, "character_content"], [els.sceneName, "scene_name"], [els.sceneContent, "scene_content"]]) element.value = draft[field] || "";
+  applySelectedCards("character", draft.character_card_ids); applySelectedCards("scene", draft.scene_card_ids);
+  ImageSettings.syncSize(); updateReferencePreview();
+  if (local && id !== "new") { singleDrafts.set(id, draft); saveSingleDraft(id).catch(() => {}); }
+}
+function resetProjectEditor() {
+  for (const element of [els.prompt, els.systemPrompt, els.projectName, els.characterName, els.characterContent, els.sceneName, els.sceneContent,
+    els.characterImage, els.sceneImage, els.referenceImages]) element.value = "";
+  els.model.value = state.config.default_model;
+  els.size.value = state.config.default_size;
+  ImageSettings.syncSize();
+  updateSingleFileText(els.characterImage, els.characterImageText, "选择参考图");
+  updateSingleFileText(els.sceneImage, els.sceneImageText, "选择参考图");
+  els.resultEmpty.classList.remove("is-hidden");
+  els.resultCard.classList.add("is-hidden");
+  els.resultImage.removeAttribute("src"); els.resultLink.href = "#";
+  els.resultMeta.textContent = ""; els.resultPrompt.textContent = ""; els.resultComposedPrompt.textContent = "";
+}
+function saveSingleDraft(id) {
+  clearTimeout(singleTimers.get(id)); singleTimers.delete(id);
+  const prior = singleSaves.get(id) || Promise.resolve();
+  const next = prior.catch(() => {}).then(async () => {
+    const draft = singleDrafts.get(id); if (!draft) return;
+    const body = JSON.stringify({ single_image_draft: draft });
+    const response = await fetch(`/api/projects/${id}/workspace`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body, signal: AbortSignal.timeout(15000), keepalive: new Blob([body]).size < 60000 });
+    if (!response.ok) throw new Error("草稿同步失败");
+    const workspace = await response.json();
+    const project = state.projects.find((p) => p.id === id); if (project) project.workspace = workspace;
+    if (singleDrafts.get(id) === draft) {
+      singleDrafts.delete(id); try { localStorage.removeItem(singleDraftPrefix + id); } catch { /* Saved to database. */ }
+      if (state.currentProjectId === id) setStatus("草稿已保存到数据库");
+    }
+  });
+  singleSaves.set(id, next);
+  next.then(() => { if (singleSaves.get(id) === next) singleSaves.delete(id); }, () => {
+    if (singleSaves.get(id) === next) singleSaves.delete(id);
+    if (singleDrafts.has(id)) singleTimers.set(id, setTimeout(() => saveSingleDraft(id).catch(() => {}), 3000));
+    if (state.currentProjectId === id) setStatus("草稿暂未同步，已保留本地副本并自动重试");
+  });
+  return next;
+}
+function flushSingleDrafts() { for (const id of singleDrafts.keys()) if (id !== "new" && !singleSaves.has(id)) saveSingleDraft(id).catch(() => {}); }
 
 function currentProject() {
   return state.projects.find((item) => item.id === state.currentProjectId) || null;
@@ -52,7 +120,7 @@ function selectedCardIds(type) {
   const selector = type === "character"
     ? '[data-card-type="character"]:checked'
     : '[data-card-type="scene"]:checked';
-  return Array.from(document.querySelectorAll(selector)).map((el) => el.value);
+  return Array.from(root.querySelectorAll(selector)).map((el) => el.value);
 }
 
 function applySelectedCards(type, ids) {
@@ -60,7 +128,7 @@ function applySelectedCards(type, ids) {
     ? '[data-card-type="character"]'
     : '[data-card-type="scene"]';
   const selected = new Set(ids || []);
-  document.querySelectorAll(selector).forEach((el) => {
+  root.querySelectorAll(selector).forEach((el) => {
     el.checked = selected.has(el.value);
   });
 }
@@ -80,11 +148,11 @@ function applySelectionSnapshot(snapshot) {
 
 function selectFirstCardSetIfEmpty() {
   if (selectedCardIds("character").length === 0) {
-    const firstCharacter = document.querySelector('[data-card-type="character"]');
+    const firstCharacter = root.querySelector('[data-card-type="character"]');
     if (firstCharacter) firstCharacter.checked = true;
   }
   if (selectedCardIds("scene").length === 0) {
-    const firstScene = document.querySelector('[data-card-type="scene"]');
+    const firstScene = root.querySelector('[data-card-type="scene"]');
     if (firstScene) firstScene.checked = true;
   }
 }
@@ -155,12 +223,14 @@ function renderProjectDetails() {
 function refillFromShot(shot) {
   if (!shot) return;
   els.prompt.value = shot.prompt || "";
+  els.systemPrompt.value = shot.system_prompt || "";
   if (shot.model) {
     els.model.value = shot.model;
   }
   if (shot.size) {
     els.size.value = shot.size;
   }
+  ImageSettings.syncSize();
   applySelectedCards("character", shot.character_card_ids || []);
   applySelectedCards("scene", shot.scene_card_ids || []);
   updateReferencePreview();
@@ -192,7 +262,7 @@ function renderResult(shot) {
   els.resultImage.src = shot.image_url;
   els.resultLink.href = shot.image_url;
   els.resultMeta.textContent = `第 ${shot.shot_number} 镜 / ${shot.mode} / ${shot.model} / ${shot.size}`;
-  els.resultPrompt.textContent = `原始提示词：${shot.prompt || ""}`;
+  els.resultPrompt.textContent = `系统提示词：${shot.system_prompt || "（未填写）"}\n用户提示词：${shot.prompt || ""}`;
   els.resultComposedPrompt.textContent = `最终发送提示词：${shot.composed_prompt || ""}`;
 }
 
@@ -220,7 +290,7 @@ function renderHistory(project) {
     </article>
   `).join("");
 
-  document.querySelectorAll(".history-action").forEach((button) => {
+  root.querySelectorAll(".history-action").forEach((button) => {
     button.addEventListener("click", () => {
       const targetShot = shots.find((item) => item.id === button.dataset.shotId);
       if (!targetShot) return;
@@ -308,23 +378,23 @@ function updateReferencePreview() {
 }
 
 async function loadConfig() {
-  const response = await fetch("/api/config");
-  const data = await response.json();
+  const data = await Studio.cached("/api/config",600000);
   state.config = data;
-  els.apiKey.value = data.api_key || "";
   els.baseUrl.value = data.base_url || "https://api.hi-code.cc/v1";
-  fillSelect(els.model, data.suggested_models || ["gpt-image-2"], data.default_model);
-  fillSelect(els.size, data.suggested_sizes || ["2048x1152"], data.default_size);
+  ImageSettings.init(data);
+  els.model.value = data.default_model;
+  els.size.value = data.default_size;
+  ImageSettings.syncSize();
   els.configStatus.textContent = data.has_api_key ? `接口已就绪：${data.base_url}` : "未填写 API Key";
 }
 
 async function loadProjects() {
   const previousSelection = collectSelectionSnapshot();
-  const response = await fetch("/api/projects");
-  state.projects = await response.json();
+  state.projects = await Studio.cached("/api/projects");
 
   if (!state.currentProjectId && state.projects.length) {
-    state.currentProjectId = state.projects[0].id;
+    const requested = initialProjectId;
+    state.currentProjectId = state.projects.some(p => p.id === requested) ? requested : state.projects[0].id;
   }
 
   renderProjectOptions();
@@ -351,6 +421,7 @@ async function loadProjects() {
 
   updateReferencePreview();
   setStatus("就绪 - 请创建角色卡或直接生图");
+  if (active) Studio.projectSelected(state.currentProjectId);
 }
 
 async function ensureActiveProject() {
@@ -369,7 +440,6 @@ async function ensureActiveProject() {
 
   const formData = new FormData();
   formData.append("name", name);
-  formData.append("synopsis", "");
 
   const response = await fetch("/api/projects", { method: "POST", body: formData });
   const data = await response.json();
@@ -378,6 +448,9 @@ async function ensureActiveProject() {
   }
 
   state.currentProjectId = data.id;
+  rememberSingleDraft();
+  singleDrafts.delete("new");
+  try { localStorage.removeItem(singleDraftPrefix + "new"); } catch { /* Project draft is retained. */ }
   await loadProjects();
   return currentProject();
 }
@@ -444,15 +517,19 @@ async function submitForm(event) {
   els.submitBtn.disabled = true;
 
   try {
+    if (!state.currentProjectId && !els.projectName.value.trim()) els.projectName.value = "单图项目";
+    await ensureActiveProject();
+    rememberSingleDraft();
+    await saveSingleDraft(state.currentProjectId);
     const formData = new FormData();
     formData.append("api_key", els.apiKey.value.trim());
     formData.append("base_url", els.baseUrl.value.trim());
     formData.append("project_id", state.currentProjectId);
     formData.append("project_name", els.projectName.value.trim());
-    formData.append("synopsis", "");
     formData.append("prompt", els.prompt.value.trim());
+    formData.append("system_prompt", els.systemPrompt.value.trim());
     formData.append("model", els.model.value.trim());
-    formData.append("size", els.size.value);
+    formData.append("size", ImageSettings.normalizeSize(els.size.value));
     formData.append("character_card_ids", selectedCardIds("character").join(","));
     formData.append("scene_card_ids", selectedCardIds("scene").join(","));
     formData.append("continue_from_last", "false");
@@ -487,7 +564,9 @@ els.addSceneCardBtn.addEventListener("click", () => {
 });
 
 els.projectSelect.addEventListener("change", (event) => {
+  flushSingleDrafts();
   state.currentProjectId = event.target.value;
+  resetProjectEditor();
   const project = currentProject();
 
   if (project) {
@@ -511,6 +590,8 @@ els.projectSelect.addEventListener("change", (event) => {
   }
 
   updateReferencePreview();
+  restoreSingleDraft();
+  if (active) Studio.projectSelected(state.currentProjectId);
 });
 
 els.characterImage.addEventListener("change", () => {
@@ -528,9 +609,10 @@ els.submitBtn.addEventListener("click", (event) => {
   submitForm(event).catch((error) => setStatus(`失败：${error.message}`));
 });
 
-document.addEventListener("change", (event) => {
+root.addEventListener("change", (event) => {
   if (event.target.matches('[data-card-type="character"], [data-card-type="scene"]')) {
     updateReferencePreview();
+    rememberSingleDraft();
   }
 });
 
@@ -538,10 +620,37 @@ updateSingleFileText(els.characterImage, els.characterImageText, "选择参考�
 updateSingleFileText(els.sceneImage, els.sceneImageText, "选择参考图");
 updateReferencePreview();
 
-loadConfig().catch((error) => {
-  els.configStatus.textContent = `配置读取失败：${error.message}`;
-});
-
-loadProjects().catch((error) => {
-  setStatus(`项目读取失败：${error.message}`);
-});
+for (const element of [els.prompt, els.systemPrompt, els.model, els.size, els.projectName, els.characterName, els.characterContent, els.sceneName, els.sceneContent]) element.addEventListener("input", rememberSingleDraft);
+listen(window,"pagehide", flushSingleDrafts);
+listen(window,"online", flushSingleDrafts);
+listen(document,"visibilitychange", () => { if (document.hidden) flushSingleDrafts(); });
+singleDraftPrefix += Studio.user.id + ":";
+const ready = Promise.all([loadConfig(),loadProjects()]).then(restoreSingleDraft).catch(error => { setStatus(`读取失败：${error.message}`); throw error; });
+async function synchronizeProject() {
+  const id = state.currentProjectId; if (!id) return;
+  try {
+    const project = await Studio.api(`/api/projects/${id}`);
+    if (!active || state.currentProjectId !== id) return;
+    const previous = currentProject(), selection = collectSelectionSnapshot();
+    const changed = JSON.stringify([previous?.character_cards,previous?.scene_cards]) !== JSON.stringify([project.character_cards,project.scene_cards]);
+    const index = state.projects.findIndex(p => p.id === id); if (index !== -1) state.projects[index] = project;
+    if (changed) { renderProjectDetails(); applySelectionSnapshot(selection); updateReferencePreview(); }
+    renderHistory(project);
+  } catch (error) { if (active && state.currentProjectId === id) setStatus(error.message); }
+}
+return {
+  ready,
+  async activate(projectId) {
+    active = true;
+    if (projectId && projectId !== state.currentProjectId) {
+      flushSingleDrafts(); state.currentProjectId = projectId;
+      resetProjectEditor();
+      await loadProjects(); restoreSingleDraft();
+    }
+    if (active) Studio.projectSelected(state.currentProjectId);
+    synchronizeProject();
+  },
+  deactivate() { active = false; flushSingleDrafts(); },
+  dispose() { active = false; lifetime.abort(); for (const timer of singleTimers.values()) clearTimeout(timer); },
+};
+}

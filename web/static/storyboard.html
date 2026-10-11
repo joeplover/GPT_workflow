@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>胶片分镜 · Photo Dream Studio</title>
+  <link rel="stylesheet" href="/static/storyboard.css">
+  <link rel="stylesheet" href="/static/console.css">
+  <script src="/static/shell.js" defer></script>
+  <script src="/static/image-settings.js" defer></script>
+  <script src="/static/storyboard.js" defer></script>
+</head>
+<body>
+  <header class="header">
+    <span class="brand">分镜工作台</span>
+    <nav><a href="/single">单图工作台 / 卡片管理</a><span class="live-dot"></span><span id="connection">连接中</span></nav>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar">
+      <div class="section-label">PROJECT / 项目</div>
+      <label class="label" for="projectSelect">当前项目</label>
+      <select id="projectSelect" aria-label="当前项目"></select>
+      <div class="new-project"><input id="projectName" placeholder="新项目名称" aria-label="新项目名称"><button id="createProject" class="icon-btn" aria-label="创建项目">＋</button></div>
+      <p class="hint">镜头提示词、顺序和结果自动保存在项目中。</p>
+
+      <details class="settings" open>
+        <summary>接口设置</summary>
+        <label class="label" for="apiKey">API Key</label>
+        <input id="apiKey" type="password" placeholder="使用服务端 Key" autocomplete="off">
+        <label class="label" for="baseUrl">接口地址</label>
+        <input id="baseUrl" type="url" placeholder="https://api.hi-code.cc/v1">
+      </details>
+
+      <details id="operationPanel" class="settings"><summary>操作记录</summary><p class="hint">查看已保存的修改和生成记录。</p><div id="operationList" class="hint">展开后加载。</div></details>
+
+      <div class="section-label refs-label">REFERENCE / 镜头参考</div>
+      <p class="hint">创建角色 / 场景卡，选择参考卡后应用到多个镜头。</p>
+      <div class="reference-actions"><button id="createCharacterCard" class="button secondary">＋ 角色卡</button><button id="createSceneCard" class="button secondary">＋ 场景卡</button></div>
+      <div class="selection-toolbar"><span>参考卡库</span><button id="libraryAll" class="text-button">全选</button><button id="libraryNone" class="text-button">清空</button></div>
+      <div id="libraryCards" class="card-list"></div>
+      <button id="applyCards" class="button primary full" disabled>应用到镜头…</button>
+      <div class="sidebar-footer"><span>每一帧，都是故事的一步。</span><small>FILM STUDIO / 01</small></div>
+    </aside>
+
+    <section class="studio">
+      <div class="studio-toolbar">
+        <div><div class="section-label">DIRECTOR'S DESK</div><h1>把故事，铺成胶片。</h1></div>
+        <div class="toolbar-actions"><button id="addFrame" class="button secondary">＋ 新建分镜</button><button id="batchGenerate" class="button primary" disabled>▶ 生成 / 更新已标记（0）</button></div>
+      </div>
+
+      <div class="work-area">
+        <section class="viewer timeline" aria-label="分镜胶片与镜头预览">
+          <div class="timeline-heading"><div><span class="section-label">THE FILM STRIP</span><h2>分镜胶片 <span id="frameCount">00</span></h2></div><span id="progress" class="progress">尚未创建镜头</span></div>
+          <div class="viewer-top"><span id="previewNumber">FRAME —</span><span id="previewStatus" class="badge">未选择</span></div>
+          <div id="previewEmpty" class="preview-empty"><span class="empty-film" aria-hidden="true">▥</span><h2>你的第一帧，从这里开始</h2><p>新增镜头，写下画面，再让故事显影。</p></div>
+          <div id="filmScroll" class="film-scroll" tabindex="0" aria-label="左右滑动，居中镜头放大"><div id="filmTrack" class="film-track"><button id="filmCreate" class="film-create" type="button" disabled><span class="create-symbol" aria-hidden="true">＋</span><span>新建分镜</span><small>点击创建空白镜头</small></button></div></div>
+          <div class="viewer-bottom"><button id="previousFrame" class="icon-btn" aria-label="上一个镜头">←</button><span id="previewTitle">暂无镜头</span><button id="nextFrame" class="icon-btn" aria-label="下一个镜头">→</button><a id="download" class="download" hidden target="_blank" rel="noopener">打开原图 ↗</a></div>
+          <div class="timeline-footer"><span>左右滑动 / ← → 切换 · 星标选择批量生成</span><span id="selectedPosition">— / —</span></div>
+        </section>
+
+        <section class="editor" aria-label="镜头编辑">
+          <div class="editor-heading"><span class="section-label">SHOT NOTES / 镜头编辑</span><span id="saveState" class="hint">自动保存</span></div>
+          <label class="label" for="frameTitle">镜头名称</label>
+          <input id="frameTitle" placeholder="例如：01 · 雨夜的开场" disabled>
+          <label class="label" for="systemPrompt">系统提示词</label>
+          <textarea id="systemPrompt" rows="3" placeholder="画风、色调、构图规则、角色一致性要求等（可选）" disabled></textarea>
+          <label class="label" for="prompt">用户提示词</label>
+          <textarea id="prompt" rows="5" placeholder="描述当前镜头的主体、动作、场景、构图与光线…" disabled></textarea>
+          <label class="label" for="model">模型（可选择或直接输入）</label>
+          <input id="model" list="modelOptions" placeholder="输入模型名称" autocomplete="off" disabled><datalist id="modelOptions"></datalist>
+          <label class="label" for="sizePreset">常用比例与分辨率</label><select id="sizePreset" disabled></select>
+          <label class="label" for="size">自定义分辨率（宽 × 高）</label><input id="size" placeholder="例如 1920x1080" autocomplete="off" disabled>
+          <p id="sizeInfo" class="hint"></p><p class="hint">可手动填写其他模型与尺寸，实际支持范围以所用接口为准。</p>
+          <div class="frame-references">
+            <div class="selection-toolbar"><span>当前镜头参考卡</span><button id="frameCardsAll" class="text-button" type="button">全选</button><button id="frameCardsNone" class="text-button" type="button">清空</button></div>
+            <div id="cardList" class="card-list"></div>
+            <p class="hint">可多选角色与场景；生成时使用卡片设定和参考图保持一致性。</p>
+          </div>
+          <p id="frameError" class="error" role="alert" hidden></p>
+          <button id="generateFrame" class="button primary full" disabled>▶ 生成这个镜头</button>
+          <button id="deleteFrame" class="button danger full" type="button" disabled>删除这个镜头</button>
+          <p class="hint editor-hint">修改提示词后可单独重新生成，其他镜头不受影响。</p>
+          <details id="versionsPanel" class="versions" hidden><summary>这个镜头的历史版本</summary><div id="versionList"></div></details>
+        </section>
+      </div>
+
+      <p id="status" class="status" role="status" aria-live="polite">正在加载工作台…</p>
+    </section>
+  </main>
+
+  <dialog id="cardDialog">
+    <form id="cardForm">
+      <div class="dialog-heading"><h2 id="cardDialogTitle">创建角色卡</h2><button class="icon-btn" type="button" data-close="cardDialog" aria-label="关闭">×</button></div>
+      <label class="label" for="cardName">名称</label><input id="cardName" required maxlength="200" placeholder="角色或场景名称">
+      <label class="label" for="cardContent">设定描述</label><textarea id="cardContent" required rows="4" placeholder="外貌、服装、特征，或场景外观、光线与氛围"></textarea>
+      <label class="label" for="cardImage">参考图片（可选）</label><input id="cardImage" type="file" accept="image/*">
+      <img id="cardImagePreview" class="card-image-preview" alt="参考图片预览" hidden>
+      <button id="saveCard" type="submit" class="button primary full">保存参考卡</button>
+      <p id="cardFormError" class="error" role="alert" hidden></p>
+    </form>
+  </dialog>
+  <dialog id="applyDialog">
+    <div class="dialog-heading"><h2>应用参考卡到镜头</h2><button class="icon-btn" type="button" data-close="applyDialog" aria-label="关闭">×</button></div>
+    <p id="applySummary" class="hint"></p>
+    <div class="selection-toolbar"><span>目标镜头（可多选）</span><button id="targetsAll" class="text-button">全选</button><button id="targetsNone" class="text-button">清空</button></div>
+    <div id="targetFrames" class="target-frames"></div>
+    <p class="hint">所选参考卡将替换目标镜头的参考卡选择。正在生成的镜头暂不可修改。</p>
+    <button id="confirmApply" class="button primary full">应用到已选镜头</button>
+    <p id="applyError" class="error" role="alert" hidden></p>
+  </dialog>
+
+</body>
+</html>

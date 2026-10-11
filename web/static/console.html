@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Photo Dream · 创作中台</title>
+  <link rel="stylesheet" href="/static/console.css">
+  <script src="/static/shell.js" defer></script>
+  <script src="/static/console.js" defer></script>
+</head>
+<body class="console-body">
+  <div class="console-layout">
+    <aside class="console-side">
+      <div class="eyebrow">WORKSPACE</div>
+      <a href="/#overview">◫　工作总览</a><a href="/#projects">▤　项目管理</a>
+      <a href="/single">▨　单图工作台</a><a href="/storyboard">▥　分镜工作台</a>
+      <a href="/#resources">▧　资源中心</a><a href="/#teams">◎　团队空间</a>
+      <a href="/#account">◉　账号设置</a><a id="adminMenu" href="/#users" hidden>☷　用户管理</a>
+      <p>你的项目默认私有。<br>共享到团队后，成员可以共同编辑与创作。</p>
+    </aside>
+    <main class="console-main" id="workspaceMain">
+      <div id="notice" role="status" hidden></div>
+      <div id="consoleView"><div class="empty">正在加载工作空间…</div></div>
+      <div id="workbenchLoading" class="workbench-loading" role="status" hidden><span class="loading-dot"></span><span>正在准备工作台…</span><button id="workbenchRetry" type="button" hidden>重试</button></div>
+      <div id="workbenchViews" hidden></div>
+    </main>
+  </div>
+  <dialog id="consoleDialog"><h2 id="dialogTitle"></h2><form id="dialogForm" class="c-form"><div id="dialogFields" class="c-form"></div><p id="dialogError" class="form-error" role="alert"></p><div class="form-actions"><button id="dialogCancel" type="button">取消</button><button id="dialogSubmit" class="primary" type="submit">保存</button></div></form></dialog>
+</body>
+</html>

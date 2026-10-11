@@ -3,13 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>分镜生图</title>
+  <title>单图工作台 · Photo Dream</title>
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/console.css">
+  <script src="/static/shell.js" defer></script>
 </head>
 <body>
 
 <header class="topbar">
-  <span class="topbar__title">分镜生图</span>
+  <span class="topbar__title">单图工作台</span>
+  <a class="text-link" href="/storyboard">胶片分镜工作台 →</a>
   <div class="topbar__row">
     <input id="apiKey" type="password" placeholder="API Key" class="topbar__input">
     <input id="baseUrl" placeholder="接口地址" class="topbar__input topbar__input--url">
@@ -56,11 +59,14 @@
 
     <section class="panel">
       <h2 class="panel__title">生成参数</h2>
+      <label for="systemPrompt">系统提示词</label>
+      <textarea id="systemPrompt" rows="3" placeholder="画风、色调、构图规则、角色一致性要求等（可选）" class="field-input"></textarea>
+      <label for="prompt">用户提示词</label>
       <textarea id="prompt" rows="4" placeholder="当前镜头提示词：主体、动作、构图、机位、氛围..." class="field-input"></textarea>
-      <div class="gen-row">
-        <select id="model" class="field-input"></select>
-        <select id="size" class="field-input"></select>
-      </div>
+      <label for="model">模型（可选择或直接输入）</label><input id="model" list="modelOptions" placeholder="输入模型名称" class="field-input" autocomplete="off"><datalist id="modelOptions"></datalist>
+      <label for="sizePreset">常用比例与分辨率</label><select id="sizePreset" class="field-input"></select>
+      <label for="size">自定义分辨率（宽 × 高）</label><input id="size" placeholder="例如 1920x1080" class="field-input" autocomplete="off">
+      <p id="sizeInfo" class="status-text"></p><p class="status-text">可手动填写其他模型与尺寸，实际支持范围以所用接口为准。</p>
       <div class="ref-section">
         <label class="file-label file-label--full">
           <span class="file-label__text" id="referenceImagesText">上传参考图（可多选）</span>
@@ -100,6 +106,7 @@
   </div>
 </div>
 
-<script src="/static/app.js"></script>
+<script src="/static/image-settings.js" defer></script>
+<script src="/static/app.js" defer></script>
 </body>
 </html>

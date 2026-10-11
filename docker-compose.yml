@@ -1,14 +1,44 @@
 services:
+  postgres:
+    image: postgres:17
+    container_name: gpt_workflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: workflow
+      POSTGRES_USER: workflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - /opt/database/postgre:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workflow -d workflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   gpt_workflow:
     build:
       context: .
       dockerfile: Dockerfile
+    image: gpt-workflow:latest
     container_name: gpt_workflow
     restart: unless-stopped
-    working_dir: /app
-    command: ["python", "-m", "web.app"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://workflow:${POSTGRES_PASSWORD}@postgres:5432/workflow
+      HICODE_API_KEY: ${HICODE_API_KEY:-}
+      HICODE_BASE_URL: ${HICODE_BASE_URL:-https://api.hi-code.cc/v1}
+      HICODE_IMAGE_MODEL: ${HICODE_IMAGE_MODEL:-gpt-image-2}
+      HICODE_IMAGE_SIZE: ${HICODE_IMAGE_SIZE:-2048x1152}
+      HICODE_REQUEST_TIMEOUT: ${HICODE_REQUEST_TIMEOUT:-300}
+      HICODE_MAX_PROJECT_SHOTS: ${HICODE_MAX_PROJECT_SHOTS:-200}
+      HICODE_VERIFY_SSL: ${HICODE_VERIFY_SSL:-true}
+      HICODE_USE_ENV_PROXY: ${HICODE_USE_ENV_PROXY:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
       - ./web/runtime:/app/web/runtime
