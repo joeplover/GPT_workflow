@@ -12,7 +12,7 @@ from starlette._utils import get_route_path
 
 from .config import APP_PREFIX, OUTPUT_DIR, RUNTIME_DIR, STATIC_DIR, UPLOAD_DIR
 from .database import dispose_database, initialize_database
-from .routers import auth, frames, images, management, projects, system
+from .routers import auth, frames, images, journal, management, projects, system
 from .security import COOKIE_NAME, current_actor, session_actor
 
 
@@ -94,11 +94,12 @@ def create_app() -> FastAPI:
     application.include_router(frames.router)
     application.include_router(auth.router)
     application.include_router(management.router)
+    application.include_router(journal.router)
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @application.get("/outputs/{filename}", include_in_schema=False)
     @application.get("/uploads/{filename}", include_in_schema=False)
-    def protected_file(request: Request, filename: str):
+    def protected_file(request: Request, filename: str, download: bool = False):
         from pathlib import Path
 
         if Path(filename).name != filename or filename in {".", ".."}:
@@ -111,10 +112,11 @@ def create_app() -> FastAPI:
             raise HTTPException(404)
         return FileResponse(
             file,
+            filename=filename if download else None,
             headers={
                 "Cache-Control": "private, no-store",
                 "X-Content-Type-Options": "nosniff",
-                "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+                "Content-Security-Policy": "sandbox allow-downloads; default-src 'none'; style-src 'unsafe-inline'",
             },
         )
 

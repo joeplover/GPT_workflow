@@ -68,6 +68,15 @@ def save_workspace(project_id: str, body: WorkspaceInput) -> dict[str, Any]:
             updates["library_selection"] = list(
                 dict.fromkeys(c for c in updates["library_selection"] if c in valid)
             )
+        if "single_image_draft" in updates:
+            for kind in ("character", "scene"):
+                valid_ids = {c["id"] for c in project[f"{kind}_cards"]}
+                field = f"{kind}_card_ids"
+                if field not in updates["single_image_draft"]:
+                    continue
+                updates["single_image_draft"][field] = [
+                    c for c in updates["single_image_draft"][field] if c in valid_ids
+                ]
         project.setdefault("workspace", {}).update(updates)
 
     return mutate_project(project_id, change, "workspace.save").get("workspace", {})
@@ -134,6 +143,70 @@ def create_card(
     return mutate_project(
         project_id, lambda current: current[key].append(card), "card.create"
     )
+
+
+def remove_card_resource(
+    project_id: str, card_type: str, card_id: str, image_only: bool
+):
+    if card_type not in {"character", "scene"}:
+        raise HTTPException(400, "无效的参考卡类型。")
+
+    def change(project):
+        from .frames import require_idle
+
+        key = f"{card_type}_cards"
+        card = next((c for c in project[key] if c["id"] == card_id), None)
+        if card is None:
+            raise HTTPException(404, "参考卡不存在。")
+        field = f"{card_type}_card_ids"
+        for frame in project["frames"]:
+            if card_id in frame.get(field, []):
+                require_idle(frame)
+                if not image_only:
+                    frame[field] = [value for value in frame[field] if value != card_id]
+                    frame["updated_at"] = now_iso()
+        if image_only:
+            card["image_url"] = None
+            card["updated_at"] = now_iso()
+        else:
+            project[key].remove(card)
+            workspace = project.get("workspace", {})
+            workspace["library_selection"] = [
+                value
+                for value in workspace.get("library_selection", [])
+                if value != card_id
+            ]
+            draft = workspace.get("single_image_draft", {})
+            if field in draft:
+                draft[field] = [value for value in draft[field] if value != card_id]
+
+    # Physical files and generation snapshots remain available in the journal/audit.
+    return mutate_project(
+        project_id, change, "card.image.remove" if image_only else "card.delete"
+    )
+
+
+@router.delete("/projects/{project_id}/cards/{card_type}/{card_id}")
+def delete_card(project_id: str, card_type: str, card_id: str):
+    return remove_card_resource(project_id, card_type, card_id, False)
+
+
+@router.delete("/projects/{project_id}/cards/{card_type}/{card_id}/image")
+def remove_card_image(project_id: str, card_type: str, card_id: str):
+    return remove_card_resource(project_id, card_type, card_id, True)
+
+
+@router.delete("/projects/{project_id}/shots/{shot_id}")
+def remove_shot(project_id: str, shot_id: str):
+    def change(project):
+        shot = next((s for s in project["shots"] if s["id"] == shot_id), None)
+        if shot is None:
+            raise HTTPException(404, "图片记录不存在。")
+        project["shots"].remove(shot)
+        for index, item in enumerate(project["shots"], 1):
+            item["shot_number"] = index
+
+    return mutate_project(project_id, change, "image.remove")
 
 
 @router.post("/projects/{project_id}/screenplay")

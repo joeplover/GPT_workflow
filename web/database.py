@@ -56,7 +56,10 @@ def initialize_database() -> None:
             text("CREATE INDEX IF NOT EXISTS ix_projects_team_id ON projects(team_id)")
         )
         with Session(bind=connection) as session:
+            from .services.journal import backfill_history
+
             if session.get(Migration, LEGACY_MIGRATION) or not PROJECTS_FILE.exists():
+                backfill_history(session)
                 return
             from .repository import normalize_project
 
@@ -86,6 +89,7 @@ def initialize_database() -> None:
             logger.info(
                 "Imported %d legacy project records; source file preserved", len(items)
             )
+            backfill_history(session)
 
 
 def dispose_database() -> None:

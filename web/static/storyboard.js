@@ -101,7 +101,7 @@ function renderCards() {
 }
 function renderLibrary() {
   const cards = referenceCards();
-  $("libraryCards").innerHTML = cards.length ? cards.map((card) => cardMarkup(card, state.librarySelection.has(card.id), state.applyingCards || Boolean(state.deletingFrame))).join("") : '<p class="hint">暂无参考卡，点击上方按钮创建。</p>';
+  $("libraryCards").innerHTML = cards.length ? cards.map((card) => `<div class="card-resource">${cardMarkup(card, state.librarySelection.has(card.id), state.applyingCards || Boolean(state.deletingFrame))}${Studio.cardActions(card, card.type, state.applyingCards || state.frames.some(f => busy(f) && (content(f)[`${card.type}_card_ids`] || []).includes(card.id)))}</div>`).join("") : '<p class="hint">暂无参考卡，点击上方按钮创建。</p>';
   for (const id of ["createCharacterCard", "createSceneCard", "libraryAll", "libraryNone"]) $(id).disabled = !state.project || state.loadingProject || state.applyingCards || Boolean(state.deletingFrame);
   $("applyCards").disabled = !state.frames.length || !state.librarySelection.size || state.loadingProject || state.applyingCards || Boolean(state.deletingFrame);
   $("applyCards").textContent = `应用到镜头…${state.librarySelection.size ? `（${state.librarySelection.size} 张卡）` : ""}`;
@@ -153,14 +153,17 @@ function renderPreview() {
   $("previewStatus").dataset.state = status;
   $("previewEmpty").hidden = state.frames.length > 0;
   $("download").hidden = !frame?.image_url;
-  if (frame?.image_url) $("download").href = Studio.asset(frame.image_url);
+  $("removeFrameImage").hidden = !frame?.image_url;
+  $("removeFrameImage").disabled = !frame || busy(frame) || Boolean(state.deletingFrame) || state.loadingProject;
+  if (frame?.image_url) $("download").href = Studio.downloadUrl(frame.image_url);
+  $("generationHistory").href = `/photodream/?project=${state.project?.id || ""}${frame ? `&frame=${frame.id}` : ""}#generations`;
   $("previousFrame").disabled = index <= 0;
   $("nextFrame").disabled = !frame || index >= state.frames.length - 1;
   $("selectedPosition").textContent = frame ? `${String(index + 1).padStart(2, "0")} / ${String(state.frames.length).padStart(2, "0")}` : "— / —";
   $("frameError").hidden = !frame?.error;
   $("frameError").textContent = frame?.error || "";
   $("versionsPanel").hidden = !frame?.versions?.length;
-  $("versionList").innerHTML = (frame?.versions || []).map((v, i) => `<a class="version-link" href="${escapeHtml(Studio.asset(v.image_url))}" target="_blank" rel="noopener" title="${escapeHtml(v.prompt)}"><img src="${escapeHtml(Studio.asset(v.image_url))}" alt="历史版本 ${i + 1}">版本 ${frame.versions.length - i}</a>`).join("");
+  $("versionList").innerHTML = (frame?.versions || []).map((v, i) => `<div><a class="version-link" href="${escapeHtml(Studio.asset(v.image_url))}" target="_blank" rel="noopener" title="${escapeHtml(v.prompt)}"><img src="${escapeHtml(Studio.asset(v.image_url))}" alt="历史版本 ${i + 1}">版本 ${frame.versions.length - i}</a><a href="${escapeHtml(Studio.downloadUrl(v.image_url))}" download>下载</a></div>`).join("");
 }
 function renderEditor() {
   const frame = currentFrame(), item = frame ? content(frame) : {}, disabled = !frame || busy(frame) || state.applyingCards || Boolean(state.deletingFrame) || state.loadingProject;
@@ -313,6 +316,17 @@ $("generateFrame").addEventListener("click", () => {
   if (frame && enqueue(frame)) { render(); pump(); }
   else message("请先填写当前镜头的提示词。", true);
 });
+$("removeFrameImage").addEventListener("click", async () => {
+  const frame = currentFrame(), projectId = state.project?.id;
+  if (!frame || busy(frame) || !confirm("移除当前镜头显示的图片？历史版本和生成日志会保留，可继续重新生成。")) return;
+  $("removeFrameImage").disabled = true;
+  try {
+    await saveDraft(projectId, frame.id);
+    applyFrame(projectId, await api(`/photodream/api/projects/${projectId}/frames/${frame.id}/image`, {method:"DELETE"}));
+    state.epoch++; render(); message("当前图片已移除，历史版本和生成日志已保留。");
+  } catch (error) { message(error.message, true); }
+  finally { render(); }
+});
 $("batchGenerate").addEventListener("click", () => {
   const marked = state.frames.filter((frame) => content(frame).marked && !busy(frame));
   const empty = marked.filter((frame) => !content(frame).prompt.trim());
@@ -337,13 +351,35 @@ $("libraryCards").addEventListener("change", (event) => {
   renderLibrary(); rememberWorkspace();
 });
 $("libraryAll").addEventListener("click", () => { state.librarySelection = new Set(referenceCards().map((card) => card.id)); renderLibrary(); rememberWorkspace(); });
+$("libraryCards").addEventListener("click", async event => {
+  const button = event.target.closest("[data-card-action]"); if (!button || !state.project) return;
+  const projectId = state.project.id; button.disabled = true;
+  try {
+    const project = await Studio.removeCard(projectId, button.dataset.cardKind, button.dataset.cardId, button.dataset.cardAction === "image");
+    if (!project || state.project?.id !== projectId) return;
+    state.project.character_cards = project.character_cards; state.project.scene_cards = project.scene_cards;
+    state.frames = project.frames;
+    const valid = new Set(referenceCards().map(c => c.id));
+    state.librarySelection = new Set([...state.librarySelection].filter(id => valid.has(id)));
+    for (const frame of state.frames) {
+      const key = currentKey(frame), draft = state.drafts.get(key);
+      if (draft) {
+        const next = {...draft};
+        for (const kind of ["character", "scene"]) next[`${kind}_card_ids`] = (next[`${kind}_card_ids`] || []).filter(id => valid.has(id));
+        rememberDraft(key, next);
+      }
+    }
+    render(); rememberWorkspace(); message("参考卡已更新，历史图片和日志已保留。");
+  } catch (error) { message(error.message, true); }
+  finally { button.disabled = false; }
+});
 $("libraryNone").addEventListener("click", () => { state.librarySelection.clear(); renderLibrary(); rememberWorkspace(); });
 $("baseUrl").addEventListener("input", rememberWorkspace);
 $("operationPanel").addEventListener("toggle", async () => {
   if (!$("operationPanel").open || !state.project) return;
   const projectId = state.project.id;
   const names = { "project.create": "创建项目", "project.update": "修改项目", "frame.initialize": "初始化镜头", "frame.create": "添加镜头", "frame.save": "保存镜头修改", "frame.delete": "删除镜头", "cards.apply": "应用参考卡", "card.create": "创建参考卡", "workspace.save": "保存工作区与草稿", "frame.generate.start": "开始生成镜头", "frame.generate.complete": "镜头生成完成", "frame.generate.fail": "镜头生成失败", "frame.recover": "恢复中断的镜头状态", "image.generate.complete": "单图生成完成", "screenplay.save": "保存剧本" };
-  Object.assign(names, {"project.metadata":"修改项目资料", "project.sharing":"修改项目共享", "project.legacy.claim":"分配历史项目归属", "cards.import":"导入资源卡片"});
+  Object.assign(names, {"project.metadata":"修改项目资料", "project.sharing":"修改项目共享", "project.legacy.claim":"分配历史项目归属", "cards.import":"导入资源卡片", "card.delete":"删除参考卡", "card.image.remove":"移除参考图"});
   $("operationList").textContent = "加载中…";
   try {
     const events = await api(`/photodream/api/projects/${projectId}/events?limit=20`);

@@ -10,10 +10,17 @@ from pydantic import BaseModel, Field
 
 from ..config import get_settings, resolve_runtime_settings
 from ..repository import get_project, mutate_project, now_iso
+from ..services.journal import (
+    start_generation,
+    complete_generation,
+    fail_generation,
+    safe_error,
+)
 from ..services.images import (
     build_reference_collage,
     relay_edit_raw,
     relay_generate_raw,
+    path_to_upload_url,
 )
 from ..services.storyboard import (
     build_composed_prompt,
@@ -64,6 +71,13 @@ def is_running(frame: dict[str, Any]) -> bool:
 def require_idle(frame: dict[str, Any]) -> None:
     if is_running(frame):
         raise HTTPException(409, "这个镜头正在生成，请等待完成后再修改。")
+
+
+def validate_cards(project, body):
+    for kind in ("character", "scene"):
+        selected = set(getattr(body, f"{kind}_card_ids"))
+        if selected - {c["id"] for c in project[f"{kind}_cards"]}:
+            raise HTTPException(400, "选择的参考卡已删除，请刷新参考卡后重试。")
 
 
 @router.get("")
@@ -128,6 +142,7 @@ def create_frame(project_id: str, body: FrameInput) -> dict[str, Any]:
     frame = new_frame(body)
 
     def append(project):
+        validate_cards(project, body)
         if len(project["frames"]) >= get_settings()["max_project_shots"]:
             raise HTTPException(400, "镜头数量已达到项目上限。")
         frame["title"] = body.title.strip() or f"镜头 {len(project['frames']) + 1:02d}"
@@ -187,6 +202,18 @@ def apply_cards(project_id: str, body: ApplyCardsInput) -> list[dict[str, Any]]:
     return [frame for frame in project["frames"] if frame["id"] in set(body.frame_ids)]
 
 
+@router.delete("/{frame_id}/image")
+def remove_frame_image(project_id: str, frame_id: str):
+    def change(project):
+        frame = find_frame(project, frame_id)
+        require_idle(frame)
+        frame.update(image_url=None, status="draft", error="", updated_at=now_iso())
+
+    return find_frame(
+        mutate_project(project_id, change, "frame.image.remove"), frame_id
+    )
+
+
 @router.post("/{frame_id}")
 def save_frame(project_id: str, frame_id: str, body: FrameInput) -> dict[str, Any]:
     # Persist incomplete settings as drafts too; generation still validates them.
@@ -194,7 +221,13 @@ def save_frame(project_id: str, frame_id: str, body: FrameInput) -> dict[str, An
     def change(project):
         frame = find_frame(project, frame_id)
         require_idle(frame)
-        frame.update(body.model_dump(), updated_at=now_iso())
+        draft = body.model_dump()
+        # A stale browser draft must not resurrect references to deleted cards.
+        for kind in ("character", "scene"):
+            field = f"{kind}_card_ids"
+            valid_ids = {c["id"] for c in project[f"{kind}_cards"]}
+            draft[field] = [value for value in draft[field] if value in valid_ids]
+        frame.update(draft, updated_at=now_iso())
 
     return find_frame(mutate_project(project_id, change, "frame.save"), frame_id)
 
@@ -215,6 +248,7 @@ def generate_frame(
     def claim(project):
         frame = find_frame(project, frame_id)
         require_idle(frame)
+        validate_cards(project, body)
         frame.update(
             body.model_dump(exclude={"api_key", "base_url", "marked"}),
             status="generating",
@@ -228,6 +262,7 @@ def generate_frame(
         )
 
     project = mutate_project(project_id, claim, "frame.generate.start")
+    record_id = None
     try:
         paths = get_card_image_paths(
             project, body.character_card_ids, body.scene_card_ids
@@ -254,12 +289,26 @@ def generate_frame(
                 )
             },
         }
+        source_path = build_reference_collage(paths) if paths else None
+        record_id = start_generation(
+            project,
+            mode="storyboard",
+            frame_id=frame_id,
+            prompt=body.prompt,
+            system_prompt=body.system_prompt,
+            composed_prompt=composed,
+            **validated,
+            character_card_ids=body.character_card_ids,
+            scene_card_ids=body.scene_card_ids,
+            reference_images=[path_to_upload_url(path) for path in paths],
+            source_image=path_to_upload_url(source_path),
+            timeout=settings["request_timeout"],
+        )
         if paths:
-            result = relay_edit_raw(
-                **arguments, image_path=build_reference_collage(paths), mask_path=None
-            )
+            result = relay_edit_raw(**arguments, image_path=source_path, mask_path=None)
         else:
             result = relay_generate_raw(**arguments)
+        complete_generation(record_id, result["image_url"])
 
         def complete(current):
             frame = find_frame(current, frame_id)
@@ -268,6 +317,7 @@ def generate_frame(
             frame["versions"].insert(
                 0,
                 {
+                    "generation_log_id": record_id,
                     "image_url": result["image_url"],
                     "prompt": body.prompt,
                     "system_prompt": body.system_prompt,
@@ -292,8 +342,9 @@ def generate_frame(
             mutate_project(project_id, complete, "frame.generate.complete"), frame_id
         )
     except Exception as exc:
+        fail_generation(record_id, exc, settings["api_key"])
         error = (
-            str(exc.detail)
+            safe_error(exc, settings["api_key"])
             if isinstance(exc, HTTPException)
             else "生成失败，请检查接口配置或稍后重试。"
         )

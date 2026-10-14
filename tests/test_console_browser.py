@@ -182,6 +182,147 @@ def test_console_registration_projects_teams_resources_and_workbenches(browser_s
     asyncio.run(check())
 
 
+def test_generation_journal_downloads_and_resource_deletion(
+    browser_server, monkeypatch
+):
+    from playwright.async_api import async_playwright, expect
+    from test_images import png_bytes
+    from web.services import images as image_files
+
+    generated = []
+
+    def relay(**kwargs):
+        generated.append(kwargs)
+        path = image_files.OUTPUT_DIR / f"browser_archive_{len(generated)}.png"
+        path.write_bytes(png_bytes())
+        return {"image_url": f"/outputs/{path.name}"}
+
+    for module in (frames, images):
+        monkeypatch.setattr(module, "relay_generate_raw", relay)
+        monkeypatch.setattr(module, "relay_edit_raw", relay)
+
+    async def check():
+        errors = []
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                executable_path="/usr/bin/google-chrome", args=["--no-sandbox"]
+            )
+            context = await browser.new_context(
+                viewport={"width": 1440, "height": 1100}, accept_downloads=True
+            )
+            page = await context.new_page()
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.on("dialog", lambda dialog: dialog.accept())
+            assert (
+                await page.request.post(
+                    browser_server + "/photodream/api/auth/register",
+                    data={
+                        "username": "journal_director",
+                        "password": "browser-password-123",
+                    },
+                )
+            ).status == 201
+            project = await (
+                await page.request.post(
+                    browser_server + "/photodream/api/projects",
+                    form={"name": "日志电影"},
+                )
+            ).json()
+            root = browser_server + f"/photodream/api/projects/{project['id']}"
+            for kind in ("character", "scene"):
+                assert (
+                    await page.request.post(
+                        root + "/cards",
+                        multipart={
+                            "card_type": kind,
+                            "name": kind,
+                            "content": "最初设定",
+                            "image": {
+                                "name": kind + ".png",
+                                "mimeType": "image/png",
+                                "buffer": png_bytes(),
+                            },
+                        },
+                    )
+                ).status == 200
+            await page.goto(
+                browser_server + f"/photodream/storyboard?project={project['id']}"
+            )
+            await expect(page.locator("#connection")).to_have_text("已连接")
+            await page.locator("#systemPrompt").fill("电影感")
+            await page.locator("#prompt").fill("第一版海边")
+            await page.locator("#frameCardsAll").click()
+            await page.locator("#generateFrame").click()
+            await expect(page.locator("#previewStatus")).to_have_text("已完成")
+            async with page.expect_download() as pending:
+                await page.locator("#download").click()
+            download = await pending.value
+            assert download.suggested_filename == "browser_archive_1.png"
+            assert Path(await download.path()).read_bytes() == png_bytes()
+            await page.locator("#prompt").fill("第二版城市")
+            await page.locator("#generateFrame").click()
+            await expect(page.locator("#previewStatus")).to_have_text("已完成")
+            await expect(page.locator("#versionList img")).to_have_count(2)
+            await page.locator(
+                '#libraryCards [data-card-action="image"][data-card-kind="scene"]'
+            ).click()
+            await expect(
+                page.locator(
+                    '#libraryCards [data-card-action="image"][data-card-kind="scene"]'
+                )
+            ).to_have_count(0)
+            await page.locator(
+                '#libraryCards [data-card-action="delete"][data-card-kind="character"]'
+            ).click()
+            await expect(
+                page.locator('#cardList input[data-type="character"]')
+            ).to_have_count(0)
+            await page.locator("#removeFrameImage").click()
+            await expect(page.locator("#download")).to_be_hidden()
+            await page.locator("#generationHistory").click()
+            await expect(page.locator(".page-head h1")).to_have_text("生成日志")
+            await expect(page.locator(".generation-card")).to_have_count(2)
+            await page.locator("[data-generation]").last.click()
+            await expect(page.locator("#journalDetails")).to_be_visible()
+            await expect(
+                page.locator("#journalDetailBody textarea").nth(1)
+            ).to_have_value("第一版海边")
+            await expect(
+                page.locator("#journalDetailBody textarea").nth(2)
+            ).to_have_value(generated[0]["prompt"])
+            await expect(
+                page.locator("#journalDetailBody textarea").nth(3)
+            ).to_contain_text("最初设定")
+            async with page.expect_download() as pending:
+                await page.locator("#journalDetailBody a[download]").click()
+            assert (await pending.value).suggested_filename == "browser_archive_1.png"
+            await page.locator("#journalClose").click()
+            await page.locator('.console-side a[href="/photodream/#resources"]').click()
+            await expect(page.locator(".resource-card")).to_have_count(1)
+            await page.locator('.resource-card [data-card-action="delete"]').click()
+            await expect(page.locator(".resource-card")).to_have_count(0)
+            await page.locator('.studio-links a[href="/photodream/single"]').click()
+            await expect(page.locator("#sceneCardList .card-chip")).to_have_count(0)
+            await page.locator(
+                'studio-workbench[data-workbench="single"] #prompt'
+            ).fill("单图测试")
+            await page.locator("#submitBtn").click()
+            await expect(page.locator("#resultDownload")).to_be_visible()
+            async with page.expect_download() as pending:
+                await page.locator("#resultDownload").click()
+            assert (await pending.value).suggested_filename == "browser_archive_3.png"
+            await page.locator('.history-action[data-action="remove"]').click()
+            await expect(page.locator(".history-item")).to_have_count(0)
+            await page.locator(
+                '.console-side a[href="/photodream/#generations"]'
+            ).click()
+            await expect(page.locator(".generation-card")).to_have_count(3)
+            assert not errors, errors
+            await browser.close()
+
+    asyncio.run(check())
+
+
 def test_existing_storyboard_regression(browser_server):
     import httpx
     from browser_storyboard import check

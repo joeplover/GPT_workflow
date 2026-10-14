@@ -197,20 +197,21 @@ function renderCardList(container, cards, type) {
       ? `<img class="card-chip__thumb" src="${escapeHtml(Studio.asset(card.image_url))}" alt="${escapeHtml(card.name)}">`
       : "";
     return `
-    <label class="card-chip">
+    <div class="card-resource"><label class="card-chip">
       <input type="checkbox" data-card-type="${type}" value="${escapeHtml(card.id)}">
       ${thumbHtml}
       <span>
         <strong>${escapeHtml(card.name)}</strong>
         <small>${escapeHtml(card.content)}</small>
       </span>
-    </label>
+    </label>${Studio.cardActions(card, type)}</div>
   `;
   }).join("");
 }
 
 function renderProjectDetails() {
   const project = currentProject();
+  root.getElementById("generationHistory").href = project ? `/photodream/?project=${project.id}#generations` : "/photodream/#generations";
   if (!project) {
     renderCardList(els.characterCardList, [], "character");
     renderCardList(els.sceneCardList, [], "scene");
@@ -261,6 +262,7 @@ function renderResult(shot) {
   els.resultCard.classList.remove("is-hidden");
   els.resultImage.src = Studio.asset(shot.image_url);
   els.resultLink.href = Studio.asset(shot.image_url);
+  root.getElementById("resultDownload").href = Studio.downloadUrl(shot.image_url);
   els.resultMeta.textContent = `第 ${shot.shot_number} 镜 / ${shot.mode} / ${shot.model} / ${shot.size}`;
   els.resultPrompt.textContent = `系统提示词：${shot.system_prompt || "（未填写）"}\n用户提示词：${shot.prompt || ""}`;
   els.resultComposedPrompt.textContent = `最终发送提示词：${shot.composed_prompt || ""}`;
@@ -285,6 +287,7 @@ function renderHistory(project) {
           <button class="btn btn--small history-action" type="button" data-action="refill" data-shot-id="${escapeHtml(shot.id)}">回填</button>
           <button class="btn btn--small history-action" type="button" data-action="retry" data-shot-id="${escapeHtml(shot.id)}">重试</button>
           <button class="btn btn--small history-action" type="button" data-action="download" data-shot-id="${escapeHtml(shot.id)}">下载</button>
+          <button class="btn btn--small history-action" type="button" data-action="remove" data-shot-id="${escapeHtml(shot.id)}">移除</button>
         </div>
       </div>
     </article>
@@ -299,6 +302,10 @@ function renderHistory(project) {
         downloadShot(targetShot);
         return;
       }
+      if (button.dataset.action === "remove") {
+        removeHistoryShot(targetShot).catch(error => setStatus(error.message));
+        return;
+      }
 
       refillFromShot(targetShot);
       if (button.dataset.action === "retry") {
@@ -306,6 +313,20 @@ function renderHistory(project) {
       }
     });
   });
+}
+
+async function removeHistoryShot(shot) {
+  if (!state.currentProjectId || !confirm("从工作台历史中移除这张图片？原图和当时的提示词仍保留在生成日志中。")) return;
+  const id = state.currentProjectId;
+  const project = await Studio.api(`/photodream/api/projects/${id}/shots/${shot.id}`, {method:"DELETE"});
+  if (state.currentProjectId !== id) return;
+  state.projects[state.projects.findIndex(p => p.id === id)] = project;
+  renderHistory(project);
+  if (els.resultImage.getAttribute("src") === Studio.asset(shot.image_url)) {
+    if (project.shots.length) renderResult(project.shots[0]);
+    else { els.resultEmpty.classList.remove("is-hidden"); els.resultCard.classList.add("is-hidden"); }
+  }
+  setStatus("图片已移出工作台，生成日志中仍可查看和下载。");
 }
 
 function updateSingleFileText(inputEl, textEl, emptyText) {
@@ -624,6 +645,18 @@ for (const element of [els.prompt, els.systemPrompt, els.model, els.size, els.pr
 listen(window,"pagehide", flushSingleDrafts);
 listen(window,"online", flushSingleDrafts);
 listen(document,"visibilitychange", () => { if (document.hidden) flushSingleDrafts(); });
+for (const container of [els.characterCardList, els.sceneCardList]) container.addEventListener("click", async event => {
+  const button = event.target.closest("[data-card-action]"); if (!button || !state.currentProjectId) return;
+  const id = state.currentProjectId, selection = collectSelectionSnapshot(); button.disabled = true;
+  try {
+    const project = await Studio.removeCard(id, button.dataset.cardKind, button.dataset.cardId, button.dataset.cardAction === "image");
+    if (!project || state.currentProjectId !== id) return;
+    const index = state.projects.findIndex(p => p.id === id); state.projects[index] = project;
+    renderProjectDetails(); applySelectionSnapshot(selection); updateReferencePreview(); rememberSingleDraft();
+    setStatus("参考卡已更新，历史图片和日志已保留。");
+  } catch (error) { setStatus(error.message); }
+  finally { button.disabled = false; }
+});
 singleDraftPrefix += Studio.user.id + ":";
 const ready = Promise.all([loadConfig(),loadProjects()]).then(restoreSingleDraft).catch(error => { setStatus(`读取失败：${error.message}`); throw error; });
 async function synchronizeProject() {

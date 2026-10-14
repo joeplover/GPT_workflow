@@ -406,6 +406,7 @@ def reset_user_password(user_id: str, body: ResetPasswordInput):
 def authorize_asset(url: str):
     """Only server-owned image fields confer access, never user prompt strings."""
     from ..security import project_scope
+    from ..models import ImageGeneration
 
     variables = literal({"url": url}, type_=JSONB)
     paths = [
@@ -423,6 +424,22 @@ def authorize_asset(url: str):
     with Session(database.get_engine()) as session:
         scope = project_scope(require_actor())
         if session.scalar(select(Project.id).where(scope, predicate).limit(1)):
+            return
+        archived = or_(
+            ImageGeneration.image_url == url,
+            *(
+                func.jsonb_path_exists(
+                    ImageGeneration.request, cast(path, JSONPATH), variables
+                )
+                for path in paths + ["$.**.original_source_image ? (@ == $url)"]
+            ),
+        )
+        if session.scalar(
+            select(Project.id)
+            .join(ImageGeneration, ImageGeneration.project_id == Project.id)
+            .where(scope, archived)
+            .limit(1)
+        ):
             return
         history_paths = paths + [
             '$[*] ? (@.path[last] == "image_url" || @.path[last] == "source_image" || @.path[last] == "mask_image").before ? (@ == $url)',

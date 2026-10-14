@@ -49,6 +49,27 @@ class ProjectEvent(Base):
     )
 
 
+class ImageGeneration(Base):
+    """Permanent request snapshots and artifacts, independent of preview limits."""
+
+    __tablename__ = "image_generations"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    generation_key: Mapped[str] = mapped_column(String, unique=True)
+    project_id: Mapped[str] = mapped_column(String, index=True)
+    frame_id: Mapped[str | None] = mapped_column(String, index=True)
+    actor_id: Mapped[str | None] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, index=True)
+    request: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    image_url: Mapped[str | None] = mapped_column(String, index=True)
+    error: Mapped[str] = mapped_column(String, default="")
+    historical: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String, primary_key=True)

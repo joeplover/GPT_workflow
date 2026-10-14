@@ -9,6 +9,11 @@
   const teamName = id => teams.find(t => t.id === id)?.name || "团队项目";
   const date = value => value ? new Date(value).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—";
   const view = () => Studio.route();
+  async function generationsPage() {
+    $("consoleView").innerHTML = '<div id="journalRoot"></div>';
+    const root = $("journalRoot"), module = await import("/photodream/static/journal.js");
+    if (root.isConnected && view() === "generations") await module.mount(root, Studio, projects);
+  }
   function notify(message, error = false) { $("notice").hidden = false; $("notice").className = "notice" + (error ? " error" : ""); $("notice").textContent = message; }
   async function refresh() { [projects, teams, resources] = await Promise.all([Studio.cached("/photodream/api/projects"), Studio.api("/photodream/api/teams"), Studio.cached("/photodream/api/resources")]); initialized = true; }
   function heading(title, description, action = "") { return `<header class="page-head"><div><div class="eyebrow">Photo Dream / ${e(view().toUpperCase())}</div><h1>${title}</h1><p>${description}</p></div>${action}</header>`; }
@@ -25,7 +30,7 @@
   };
   function projectCard(p) {
     const manage = p.team_id ? ["owner","admin"].includes(teams.find(t => t.id === p.team_id)?.role) : p.owner_id === Studio.user.id;
-    return `<article class="project-card"><span class="tag">${p.team_id ? e(teamName(p.team_id)) : "个人项目"}${p.archived ? " · 已归档" : ""}</span><h2>${e(p.name)}</h2><p>${e(p.synopsis || "还没有项目简介，记录故事的起点。")}</p><div class="card-meta"><span>${p.frames.length} 个分镜</span><span>${p.character_cards.length + p.scene_cards.length} 张卡片</span><span>${date(p.updated_at)}</span></div><div class="card-actions"><a class="c-button primary" href="/photodream/storyboard?project=${e(p.id)}">打开分镜 ↗</a><a class="c-button" href="/photodream/single?project=${e(p.id)}">单图</a><button data-action="edit" data-id="${e(p.id)}">编辑</button>${manage ? `<button data-action="share" data-id="${e(p.id)}">共享设置</button><button data-action="archive" data-id="${e(p.id)}">${p.archived ? "取消归档" : "归档"}</button>` : ""}</div></article>`;
+    return `<article class="project-card"><span class="tag">${p.team_id ? e(teamName(p.team_id)) : "个人项目"}${p.archived ? " · 已归档" : ""}</span><h2>${e(p.name)}</h2><p>${e(p.synopsis || "还没有项目简介，记录故事的起点。")}</p><div class="card-meta"><span>${p.frames.length} 个分镜</span><span>${p.character_cards.length + p.scene_cards.length} 张卡片</span><span>${date(p.updated_at)}</span></div><div class="card-actions"><a class="c-button primary" href="/photodream/storyboard?project=${e(p.id)}">打开分镜 ↗</a><a class="c-button" href="/photodream/single?project=${e(p.id)}">单图</a><button data-action="generation-log" data-id="${e(p.id)}">生成日志</button><button data-action="edit" data-id="${e(p.id)}">编辑</button>${manage ? `<button data-action="share" data-id="${e(p.id)}">共享设置</button><button data-action="archive" data-id="${e(p.id)}">${p.archived ? "取消归档" : "归档"}</button>` : ""}</div></article>`;
   }
   function overview() {
     const active = projects.filter(p => !p.archived), frames = active.flatMap(p => p.frames);
@@ -50,7 +55,7 @@
     function list() {
       const term = $("resourceSearch").value.toLowerCase(), type = $("resourceType").value, filter = $("resourceScope").value;
       $("resourceGrid").innerHTML = resources.filter(c => (type === "all" || c.card_type === type) && (filter === "all" || (filter === "private" ? !c.team_id : c.team_id === filter)) && `${c.name} ${c.content} ${c.project_name}`.toLowerCase().includes(term)).map(c =>
-        `<article class="c-panel resource-card">${c.image_url ? `<img class="resource-image" src="${e(Studio.asset(c.image_url))}" alt="${e(c.name)}" loading="lazy">` : '<div class="resource-image" style="display:grid;place-items:center;color:#8fb39b">▧ 文字设定</div>'}<h3>${e(c.name)}</h3><span class="tag">${c.card_type === "character" ? "角色卡" : "场景卡"}</span><p>${e(c.content)}</p><div class="card-meta">来自 ${e(c.project_name)} · ${c.team_id ? e(teamName(c.team_id)) : "个人"}</div><button data-action="import" data-id="${e(c.id)}" data-project="${e(c.project_id)}">导入到项目…</button></article>`).join("") || '<div class="empty">暂无资源。在单图或分镜工作台中创建角色卡与场景卡。</div>';
+        `<article class="c-panel resource-card" data-resource-project="${e(c.project_id)}">${c.image_url ? `<img class="resource-image" src="${e(Studio.asset(c.image_url))}" alt="${e(c.name)}" loading="lazy">` : '<div class="resource-image" style="display:grid;place-items:center;color:#8fb39b">▧ 文字设定</div>'}<h3>${e(c.name)}</h3><span class="tag">${c.card_type === "character" ? "角色卡" : "场景卡"}</span><p>${e(c.content)}</p><div class="card-meta">来自 ${e(c.project_name)} · ${c.team_id ? e(teamName(c.team_id)) : "个人"}</div><button data-action="import" data-id="${e(c.id)}" data-project="${e(c.project_id)}">导入到项目…</button>${Studio.cardActions(c, c.card_type)}</article>`).join("") || '<div class="empty">暂无资源。在单图或分镜工作台中创建角色卡与场景卡。</div>';
     }
     for (const id of ["resourceSearch","resourceScope","resourceType"]) $(id).addEventListener(id === "resourceSearch" ? "input" : "change", list); list();
   }
@@ -88,7 +93,7 @@
     $("workspaceMain").classList.toggle("workbench-main",isWorkbench);
     $("workbenchLoading").hidden = !isWorkbench; $("workbenchRetry").hidden = true;
     $("workbenchLoading").querySelector("span:last-of-type").textContent = "正在准备工作台…";
-    document.title = `${({single:"单图工作台",storyboard:"分镜工作台",projects:"项目管理",resources:"资源中心",teams:"团队空间",account:"账号设置",users:"用户管理"})[name] || "创作中台"} · Photo Dream`;
+    document.title = `${({single:"单图工作台",storyboard:"分镜工作台",projects:"项目管理",resources:"资源中心",generations:"生成日志",teams:"团队空间",account:"账号设置",users:"用户管理"})[name] || "创作中台"} · Photo Dream`;
     if (isWorkbench) {
       const projectId = new URL(location.href).searchParams.get("project") || Studio.projectId;
       try {
@@ -108,7 +113,7 @@
     }
     if (!initialized || wasWorkbench) await refresh();
     if (version !== renderVersion) return;
-    await ({overview,projects:projectsPage,resources:resourcesPage,teams:teamsPage,account:accountPage,users:usersPage}[name] || overview)();
+    await ({overview,projects:projectsPage,resources:resourcesPage,generations:generationsPage,teams:teamsPage,account:accountPage,users:usersPage}[name] || overview)();
     if (version === renderVersion) $("workspaceMain").scrollTop = scrollPositions.get(name) || 0;
   }
   function newProject(team = "") {
@@ -118,10 +123,22 @@
     },"创建项目"); $("dialogForm").elements.team_id.value = team;
   }
   $("consoleView").addEventListener("click", async event => {
+    const cardButton = event.target.closest("[data-card-action]");
+    if (cardButton) {
+      cardButton.disabled = true;
+      try {
+        const projectId = cardButton.closest("[data-resource-project]").dataset.resourceProject;
+        const changed = await Studio.removeCard(projectId, cardButton.dataset.cardKind, cardButton.dataset.cardId, cardButton.dataset.cardAction === "image");
+        if (changed) { await refresh(); await render(); notify("参考卡已更新，历史图片和日志已保留。"); }
+      } catch (error) { notify(error.message, true); }
+      finally { cardButton.disabled = false; }
+      return;
+    }
     const button = event.target.closest("[data-action]"); if (!button) return;
     const {action,id,team,role,project: sourceId} = button.dataset, p = projects.find(p => p.id === id);
     try {
       if (action === "new-project") newProject();
+      else if (action === "generation-log") Studio.navigate(`/photodream/?project=${encodeURIComponent(id)}#generations`);
       else if (action === "new-user") modal("创建用户", '<label>用户名<input name="username" required minlength="3" maxlength="64" autocomplete="off" pattern="[a-zA-Z0-9_\\-.]+"></label><label>显示名称<input name="display_name" maxlength="100"></label><label>初始密码<input name="password" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label>', data => Studio.post("/photodream/api/admin/users",data),"创建用户");
       else if (action === "user-status") { const is_active = button.dataset.active === "true"; if (!confirm(is_active ? "启用此用户账号？" : "停用此用户账号？所有已登录会话会立即失效，数据仍保留。")) return; await Studio.post(`/photodream/api/admin/users/${id}/status`,{is_active}); await render(); }
       else if (action === "reset-password") modal("重置用户密码", '<p class="muted">重置后此用户的所有已登录会话会退出。请将新密码安全地交给账号本人。</p><label>新密码<input name="password" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label>',data => Studio.post(`/photodream/api/admin/users/${id}/password`,data),"重置密码");

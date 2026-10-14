@@ -10,6 +10,12 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..config import resolve_runtime_settings
 from ..repository import ensure_project
+from ..services.journal import (
+    start_generation,
+    complete_generation,
+    fail_generation,
+    update_source,
+)
 from ..services.images import (
     build_reference_collage,
     local_path_from_url,
@@ -118,12 +124,32 @@ def generate_image(
         reference_urls.append(url)
         reference_sources[url] = "单独参考图"
 
+    record_id = start_generation(
+        project,
+        mode="reference_generate"
+        if has_refs
+        else "continue"
+        if use_last and last_shot
+        else "generate",
+        prompt=prompt.strip(),
+        system_prompt=system_prompt.strip(),
+        composed_prompt=composed_prompt,
+        **validated,
+        character_card_ids=selected_character_ids,
+        scene_card_ids=selected_scene_ids,
+        reference_images=reference_urls,
+        source_image=last_shot["image_url"]
+        if use_last and last_shot and not has_refs
+        else None,
+        timeout=settings["request_timeout"],
+    )
     try:
         if reference_paths:
             print(
                 f"[DEBUG][{request_id}] 使用 reference_generate 模式，参考图数量: {len(reference_paths)}"
             )
             collage_path = build_reference_collage(reference_paths)
+            update_source(record_id, path_to_upload_url(collage_path))
             result = relay_edit_raw(
                 prompt=composed_prompt,
                 model=validated["model"],
@@ -174,23 +200,28 @@ def generate_image(
             source_image = None
             mode = "generate"
     except requests.exceptions.SSLError as exc:
+        fail_generation(record_id, exc, settings["api_key"])
         raise HTTPException(
             status_code=502, detail=f"SSL error while calling relay API: {exc}"
         ) from exc
     except requests.RequestException as exc:
+        fail_generation(record_id, exc, settings["api_key"])
         raise HTTPException(
             status_code=502, detail=f"Relay API request failed: {exc}"
         ) from exc
     except HTTPException as exc:
+        fail_generation(record_id, exc, settings["api_key"])
         print(
             f"[ERROR][{request_id}] HTTPException status={exc.status_code} detail={exc.detail}"
         )
         raise
     except Exception as exc:
+        fail_generation(record_id, exc, settings["api_key"])
         print(f"[ERROR][{request_id}] Unexpected error: {exc}")
         print(traceback.format_exc())
         raise
 
+    complete_generation(record_id, result["image_url"])
     print(
         f"[DEBUG][{request_id}] 生成完成, mode={mode}, composed_prompt前100字符: {composed_prompt[:100]}..."
     )
@@ -307,6 +338,7 @@ def edit_image(
         mask_path = save_upload_file(mask)
         mask_image_url = path_to_upload_url(mask_path)
 
+    original_source_image_url = source_image_url
     if reference_paths and not mask_path and image_path:
         base_paths: List[Path] = []
         if image_path not in reference_paths:
@@ -315,6 +347,21 @@ def edit_image(
         image_path = build_reference_collage(base_paths)
         source_image_url = path_to_upload_url(image_path)
 
+    record_id = start_generation(
+        project,
+        mode="edit",
+        prompt=prompt.strip(),
+        system_prompt=system_prompt.strip(),
+        composed_prompt=composed_prompt,
+        **validated,
+        character_card_ids=selected_character_ids,
+        scene_card_ids=selected_scene_ids,
+        reference_images=reference_urls,
+        source_image=source_image_url,
+        original_source_image=original_source_image_url,
+        mask_image=mask_image_url,
+        timeout=settings["request_timeout"],
+    )
     try:
         result = relay_edit_raw(
             prompt=composed_prompt,
@@ -329,14 +376,20 @@ def edit_image(
             request_timeout=settings["request_timeout"],
         )
     except requests.exceptions.SSLError as exc:
+        fail_generation(record_id, exc, settings["api_key"])
         raise HTTPException(
             status_code=502, detail=f"SSL error while calling relay edit API: {exc}"
         ) from exc
     except requests.RequestException as exc:
+        fail_generation(record_id, exc, settings["api_key"])
         raise HTTPException(
             status_code=502, detail=f"Relay edit API request failed: {exc}"
         ) from exc
+    except Exception as exc:
+        fail_generation(record_id, exc, settings["api_key"])
+        raise
 
+    complete_generation(record_id, result["image_url"])
     return add_shot_to_project(
         project_id=project["id"],
         mode="edit",
