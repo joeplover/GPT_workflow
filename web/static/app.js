@@ -204,7 +204,7 @@ function renderCardList(container, cards, type) {
         <strong>${escapeHtml(card.name)}</strong>
         <small>${escapeHtml(card.content)}</small>
       </span>
-    </label>${Studio.cardActions(card, type)}</div>
+    </label>${Studio.cardActions(card, type, false, "single")}</div>
   `;
   }).join("");
 }
@@ -287,7 +287,7 @@ function renderHistory(project) {
           <button class="btn btn--small history-action" type="button" data-action="refill" data-shot-id="${escapeHtml(shot.id)}">回填</button>
           <button class="btn btn--small history-action" type="button" data-action="retry" data-shot-id="${escapeHtml(shot.id)}">重试</button>
           <button class="btn btn--small history-action" type="button" data-action="download" data-shot-id="${escapeHtml(shot.id)}">下载</button>
-          <button class="btn btn--small history-action" type="button" data-action="remove" data-shot-id="${escapeHtml(shot.id)}">移除</button>
+          <button class="btn btn--small danger history-action" type="button" data-action="remove" data-shot-id="${escapeHtml(shot.id)}">移除</button>
         </div>
       </div>
     </article>
@@ -669,6 +669,11 @@ async function synchronizeProject() {
     const index = state.projects.findIndex(p => p.id === id); if (index !== -1) state.projects[index] = project;
     if (changed) { renderProjectDetails(); applySelectionSnapshot(selection); updateReferencePreview(); }
     renderHistory(project);
+    const displayed = els.resultImage.getAttribute("src");
+    if (displayed && !project.shots.some(shot => Studio.asset(shot.image_url) === displayed)) {
+      els.resultImage.removeAttribute("src");
+      els.resultCard.classList.add("is-hidden"); els.resultEmpty.classList.remove("is-hidden");
+    }
   } catch (error) { if (active && state.currentProjectId === id) setStatus(error.message); }
 }
 return {

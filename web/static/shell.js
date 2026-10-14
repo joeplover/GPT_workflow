@@ -19,13 +19,22 @@ window.Studio = (() => {
   // Keep persisted asset paths stable while serving them within the application.
   function asset(url) { return /^\/(uploads|outputs)\//.test(url || "") ? "/photodream" + url : url; }
   function downloadUrl(url) { return asset(url) + "?download=true"; }
-  function cardActions(card, type, disabled = false) {
+  function cardActions(card, type, disabled = false, variant = "console") {
+    const classes = variant === "single" ? "btn btn--small" : variant === "storyboard" ? "button button--small secondary" : "c-button";
     const attrs = `data-card-id="${escape(card.id)}" data-card-kind="${escape(type)}" ${disabled ? "disabled" : ""}`;
-    return `<div class="card-resource-actions">${card.image_url ? `<a href="${escape(downloadUrl(card.image_url))}" download>下载参考图</a><button type="button" data-card-action="image" ${attrs}>移除图片</button>` : ""}<button type="button" data-card-action="delete" ${attrs}>删除卡片</button></div>`;
+    return `<div class="card-resource-actions${variant === "console" ? " card-actions" : ""}">${card.image_url ? `<a class="${classes}" href="${escape(downloadUrl(card.image_url))}" download>下载参考图</a><button class="${classes}" type="button" data-card-action="image" ${attrs}>移除图片</button>` : ""}<button class="${classes} danger" type="button" data-card-action="delete" ${attrs}>删除卡片</button></div>`;
   }
   async function removeCard(projectId, kind, id, imageOnly) {
     if (!confirm(imageOnly ? "移除这张参考图？卡片文字设定会保留，历史文件仍可追溯。" : "删除这张参考卡？关联镜头会取消选用，已生成的图片和日志会保留。")) return null;
     return api(`/photodream/api/projects/${projectId}/cards/${kind}/${id}${imageOnly ? "/image" : ""}`, {method:"DELETE"});
+  }
+  async function purgeImage(projectId, imageUrl) {
+    if (!confirm("彻底删除这张图片？服务器文件和当前图片引用将被永久移除，无法恢复。生成日志中的提示词和原始路径会保留。")) return null;
+    const result = await api(`/photodream/api/projects/${encodeURIComponent(projectId)}/assets`, {
+      method: "DELETE", headers: {"Content-Type": "application/json"}, body: JSON.stringify({image_url: imageUrl})
+    });
+    projectSelected(result.project.id);
+    return result;
   }
   async function api(url, options = {}) {
     const response = await fetch(url, options), body = await response.json();
@@ -91,7 +100,7 @@ window.Studio = (() => {
     const view = document.getElementById("consoleView"); if (view) view.textContent = "工作空间加载失败，请刷新重试。";
     throw error;
   });
-  return {ready,api,post,cached,escape,asset,downloadUrl,cardActions,removeCard,route,navigate,projectSelected,highlight,
+  return {ready,api,post,cached,escape,asset,downloadUrl,cardActions,removeCard,purgeImage,route,navigate,projectSelected,highlight,
     onRoute(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     get projectId() { return currentProject; }, get user() { return user; }};
 })();

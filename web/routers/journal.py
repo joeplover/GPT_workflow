@@ -7,13 +7,16 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .. import database
-from ..models import ImageGeneration, Project
+from ..models import AssetDeletion, ImageGeneration, Project
 from ..security import project_scope, require_actor
 
 router = APIRouter(prefix="/api/generations", tags=["generation journal"])
 
 
-def serialize(row, project_name):
+def serialize(row, project_name, deleted=None):
+    deleted = deleted or {}
+    from ..services.assets import image_urls
+
     return {
         "id": row.id,
         "generation_key": row.generation_key,
@@ -24,6 +27,12 @@ def serialize(row, project_name):
         "status": row.status,
         "request": row.request,
         "image_url": row.image_url,
+        "image_deleted": row.image_url in deleted,
+        "deleted_images": {
+            url: deleted[url]
+            for url in image_urls(row.request) | {row.image_url}
+            if url in deleted
+        },
         "error": row.error,
         "historical": row.historical,
         "created_at": row.created_at.isoformat(),
@@ -77,8 +86,9 @@ def list_generations(
         rows = session.execute(
             query.order_by(ImageGeneration.id.desc()).limit(limit + 1)
         ).all()
+        deleted = deletion_info(session, rows[:limit])
         items = [
-            serialize(row, project.document.get("name", ""))
+            serialize(row, project.document.get("name", ""), deleted)
             for row, project in rows[:limit]
         ]
         return {
@@ -98,4 +108,27 @@ def read_generation(record_id: int):
         if not match:
             raise HTTPException(404, "生成记录不存在或无权访问。")
         row, project = match
-        return serialize(row, project.document.get("name", ""))
+        return serialize(
+            row, project.document.get("name", ""), deletion_info(session, [match])
+        )
+
+
+def deletion_info(session, rows):
+    from ..services.assets import image_urls
+
+    urls = set()
+    for row, _ in rows:
+        urls.update(image_urls(row.request))
+        if row.image_url:
+            urls.add(row.image_url)
+    if not urls:
+        return {}
+    return {
+        item.image_url: {
+            "deleted_at": item.deleted_at.isoformat(),
+            "file_removed": item.file_removed,
+        }
+        for item in session.scalars(
+            select(AssetDeletion).where(AssetDeletion.image_url.in_(urls))
+        )
+    }

@@ -55,7 +55,7 @@
           <div class="viewer-top"><span id="previewNumber">FRAME —</span><span id="previewStatus" class="badge">未选择</span></div>
           <div id="previewEmpty" class="preview-empty"><span class="empty-film" aria-hidden="true">▥</span><h2>你的第一帧，从这里开始</h2><p>新增镜头，写下画面，再让故事显影。</p></div>
           <div id="filmScroll" class="film-scroll" tabindex="0" aria-label="左右滑动，居中镜头放大"><div id="filmTrack" class="film-track"><button id="filmCreate" class="film-create" type="button" disabled><span class="create-symbol" aria-hidden="true">＋</span><span>新建分镜</span><small>点击创建空白镜头</small></button></div></div>
-          <div class="viewer-bottom"><button id="previousFrame" class="icon-btn" aria-label="上一个镜头">←</button><span id="previewTitle">暂无镜头</span><button id="nextFrame" class="icon-btn" aria-label="下一个镜头">→</button><a id="download" class="download" hidden download>下载图片 ↓</a><a id="generationHistory" class="download" href="/photodream/#generations">生成日志</a></div>
+          <div class="viewer-bottom"><button id="previousFrame" class="icon-btn" aria-label="上一个镜头">←</button><span id="previewTitle">暂无镜头</span><button id="nextFrame" class="icon-btn" aria-label="下一个镜头">→</button><div class="viewer-actions"><a id="download" class="download" hidden download>下载图片 ↓</a><a id="generationHistory" class="download" href="/photodream/#generations">生成日志</a></div></div>
           <div class="timeline-footer"><span>左右滑动 / ← → 切换 · 星标选择批量生成</span><span id="selectedPosition">— / —</span></div>
         </section>
 
@@ -81,7 +81,7 @@
           <button id="generateFrame" class="button primary full" disabled>▶ 生成这个镜头</button>
           <button id="deleteFrame" class="button danger full" type="button" disabled>删除这个镜头</button>
           <p class="hint editor-hint">修改提示词后可单独重新生成，其他镜头不受影响。</p>
-          <button id="removeFrameImage" class="secondary" type="button" hidden>移除当前图片（保留历史）</button>
+          <button id="removeFrameImage" class="button secondary full" type="button" hidden>移除当前图片（保留历史）</button>
           <details id="versionsPanel" class="versions" hidden><summary>这个镜头的历史版本</summary><div id="versionList"></div></details>
         </section>
       </div>

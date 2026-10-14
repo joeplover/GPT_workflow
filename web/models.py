@@ -70,6 +70,19 @@ class ImageGeneration(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class AssetDeletion(Base):
+    """Durable tombstone; prompts retain original URLs after physical deletion."""
+
+    __tablename__ = "asset_deletions"
+    image_url: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(String, index=True)
+    actor_id: Mapped[str] = mapped_column(String)
+    file_removed: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String, primary_key=True)

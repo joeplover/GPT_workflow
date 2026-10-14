@@ -12,7 +12,7 @@ from starlette._utils import get_route_path
 
 from .config import APP_PREFIX, OUTPUT_DIR, RUNTIME_DIR, STATIC_DIR, UPLOAD_DIR
 from .database import dispose_database, initialize_database
-from .routers import auth, frames, images, journal, management, projects, system
+from .routers import assets, auth, frames, images, journal, management, projects, system
 from .security import COOKIE_NAME, current_actor, session_actor
 
 
@@ -22,6 +22,9 @@ async def lifespan(app: FastAPI):
         directory.mkdir(parents=True, exist_ok=True)
     try:
         await run_in_threadpool(initialize_database)
+        from .services.assets import retry_pending_deletions
+
+        await run_in_threadpool(retry_pending_deletions)
         yield
     finally:
         dispose_database()
@@ -95,6 +98,7 @@ def create_app() -> FastAPI:
     application.include_router(auth.router)
     application.include_router(management.router)
     application.include_router(journal.router)
+    application.include_router(assets.router)
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @application.get("/outputs/{filename}", include_in_schema=False)

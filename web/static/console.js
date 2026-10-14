@@ -4,6 +4,8 @@
   const workbenches = import("/photodream/static/workbenches.js");
   let renderVersion = 0, previousView = "", initialized = false;
   const scrollPositions = new Map();
+  const resourceFilters = {search:"", scope:"all", type:"all", project:""};
+  const resourceOpen = new Set();
   let projects = [], teams = [], resources = [], selectedTeam = "", search = "", scope = "all", archive = "active", modalAction;
   const roles = {owner:"所有者", admin:"管理员", member:"成员"};
   const teamName = id => teams.find(t => t.id === id)?.name || "团队项目";
@@ -50,14 +52,25 @@
     $("archiveFilter").onchange = event => { archive = event.target.value; list(); }; list();
   }
   function resourcesPage() {
-    $("consoleView").innerHTML = heading("资源中心", "汇总可访问项目中的角色卡与场景卡。导入副本后，可直接在目标项目的镜头中使用。") +
-      `<div class="filters"><input id="resourceSearch" placeholder="搜索资源名称、设定或来源项目"><select id="resourceScope"><option value="all">全部空间</option><option value="private">个人空间</option>${teamOptions(false)}</select><select id="resourceType"><option value="all">角色卡与场景卡</option><option value="character">角色卡</option><option value="scene">场景卡</option></select></div><div id="resourceGrid" class="resource-grid"></div>`;
+    $("consoleView").innerHTML = heading("资源中心", "按项目管理角色卡与场景卡，展开项目查看资源。彻底删除会同时清理服务器图片文件。") +
+      `<div class="filters"><input id="resourceSearch" placeholder="搜索资源名称、设定或来源项目"><select id="resourceProject"><option value="">全部项目</option>${projects.map(p => `<option value="${e(p.id)}">${e(p.name)}</option>`).join("")}</select><select id="resourceScope"><option value="all">全部空间</option><option value="private">个人空间</option>${teamOptions(false)}</select><select id="resourceType"><option value="all">角色卡与场景卡</option><option value="character">角色卡</option><option value="scene">场景卡</option></select></div><div id="resourceGrid" class="project-groups"></div>`;
+    for (const [key, id] of [["search","resourceSearch"],["scope","resourceScope"],["type","resourceType"],["project","resourceProject"]]) $(id).value = resourceFilters[key];
     function list() {
       const term = $("resourceSearch").value.toLowerCase(), type = $("resourceType").value, filter = $("resourceScope").value;
-      $("resourceGrid").innerHTML = resources.filter(c => (type === "all" || c.card_type === type) && (filter === "all" || (filter === "private" ? !c.team_id : c.team_id === filter)) && `${c.name} ${c.content} ${c.project_name}`.toLowerCase().includes(term)).map(c =>
-        `<article class="c-panel resource-card" data-resource-project="${e(c.project_id)}">${c.image_url ? `<img class="resource-image" src="${e(Studio.asset(c.image_url))}" alt="${e(c.name)}" loading="lazy">` : '<div class="resource-image" style="display:grid;place-items:center;color:#8fb39b">▧ 文字设定</div>'}<h3>${e(c.name)}</h3><span class="tag">${c.card_type === "character" ? "角色卡" : "场景卡"}</span><p>${e(c.content)}</p><div class="card-meta">来自 ${e(c.project_name)} · ${c.team_id ? e(teamName(c.team_id)) : "个人"}</div><button data-action="import" data-id="${e(c.id)}" data-project="${e(c.project_id)}">导入到项目…</button>${Studio.cardActions(c, c.card_type)}</article>`).join("") || '<div class="empty">暂无资源。在单图或分镜工作台中创建角色卡与场景卡。</div>';
+      const selected = $("resourceProject").value, groups = new Map();
+      Object.assign(resourceFilters, {search:$("resourceSearch").value, type, scope:filter, project:selected});
+      for (const c of resources.filter(c => (!selected || c.project_id === selected) && (type === "all" || c.card_type === type) && (filter === "all" || (filter === "private" ? !c.team_id : c.team_id === filter)) && `${c.name} ${c.content} ${c.project_name}`.toLowerCase().includes(term))) {
+        if (!groups.has(c.project_id)) groups.set(c.project_id, []);
+        groups.get(c.project_id).push(c);
+      }
+      $("resourceGrid").innerHTML = [...groups].map(([id, cards]) => `<details class="project-resource-group" data-group-project="${e(id)}" ${selected || resourceOpen.has(id) ? "open" : ""}><summary><span>${e(cards[0].project_name)}</span><span class="muted">${cards.length} 张参考卡 · ${cards[0].team_id ? e(teamName(cards[0].team_id)) : "个人空间"}</span></summary><div class="resource-grid">${cards.map(c =>
+        `<article class="c-panel resource-card" data-resource-project="${e(c.project_id)}">${c.image_url ? `<img class="resource-image" src="${e(Studio.asset(c.image_url))}" alt="${e(c.name)}" loading="lazy">` : '<div class="resource-image generation-placeholder">▧ 文字设定</div>'}<h3>${e(c.name)}</h3><span class="tag">${c.card_type === "character" ? "角色卡" : "场景卡"}</span><p>${e(c.content)}</p><div class="card-meta">来自 ${e(c.project_name)}</div><button data-action="import" data-id="${e(c.id)}" data-project="${e(c.project_id)}">导入到项目…</button>${Studio.cardActions(c, c.card_type)}${c.image_url ? `<div class="card-actions"><button class="c-button danger" data-action="purge-resource" data-project="${e(c.project_id)}" data-image-url="${e(c.image_url)}">彻底删除图片</button></div>` : ""}</article>`).join("")}</div></details>`).join("") || '<div class="empty">暂无符合条件的资源。在工作台中创建角色卡与场景卡。</div>';
+      for (const group of $("resourceGrid").querySelectorAll("details")) group.ontoggle = () => {
+        if (!group.isConnected) return;
+        if (group.open) resourceOpen.add(group.dataset.groupProject); else resourceOpen.delete(group.dataset.groupProject);
+      };
     }
-    for (const id of ["resourceSearch","resourceScope","resourceType"]) $(id).addEventListener(id === "resourceSearch" ? "input" : "change", list); list();
+    for (const id of ["resourceSearch","resourceScope","resourceType","resourceProject"]) $(id).addEventListener(id === "resourceSearch" ? "input" : "change", list); list();
   }
   async function teamsPage() {
     if (!teams.some(t => t.id === selectedTeam)) selectedTeam = teams[0]?.id || "";
@@ -138,6 +151,12 @@
     const {action,id,team,role,project: sourceId} = button.dataset, p = projects.find(p => p.id === id);
     try {
       if (action === "new-project") newProject();
+      else if (action === "purge-resource") {
+        button.disabled = true;
+        try {
+          if (await Studio.purgeImage(sourceId, button.dataset.imageUrl)) { await refresh(); await render(); notify("图片文件已彻底删除，文字设定和提示词日志已保留。"); }
+        } finally { button.disabled = false; }
+      }
       else if (action === "generation-log") Studio.navigate(`/photodream/?project=${encodeURIComponent(id)}#generations`);
       else if (action === "new-user") modal("创建用户", '<label>用户名<input name="username" required minlength="3" maxlength="64" autocomplete="off" pattern="[a-zA-Z0-9_\\-.]+"></label><label>显示名称<input name="display_name" maxlength="100"></label><label>初始密码<input name="password" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label>', data => Studio.post("/photodream/api/admin/users",data),"创建用户");
       else if (action === "user-status") { const is_active = button.dataset.active === "true"; if (!confirm(is_active ? "启用此用户账号？" : "停用此用户账号？所有已登录会话会立即失效，数据仍保留。")) return; await Studio.post(`/photodream/api/admin/users/${id}/status`,{is_active}); await render(); }

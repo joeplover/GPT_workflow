@@ -148,6 +148,7 @@ def test_console_registration_projects_teams_resources_and_workbenches(browser_s
             await member.locator(
                 '.studio-links a[href="/photodream/#resources"]'
             ).click()
+            await member.locator("#resourceGrid summary").click()
             await member.locator('[data-action="import"]').click()
             await member.locator("#dialogSubmit").click()
             await expect(member.locator(".resource-card")).to_have_count(2)
@@ -299,6 +300,7 @@ def test_generation_journal_downloads_and_resource_deletion(
             await page.locator("#journalClose").click()
             await page.locator('.console-side a[href="/photodream/#resources"]').click()
             await expect(page.locator(".resource-card")).to_have_count(1)
+            await page.locator("#resourceGrid summary").click()
             await page.locator('.resource-card [data-card-action="delete"]').click()
             await expect(page.locator(".resource-card")).to_have_count(0)
             await page.locator('.studio-links a[href="/photodream/single"]').click()
@@ -317,6 +319,150 @@ def test_generation_journal_downloads_and_resource_deletion(
                 '.console-side a[href="/photodream/#generations"]'
             ).click()
             await expect(page.locator(".generation-card")).to_have_count(3)
+            assert not errors, errors
+            await browser.close()
+
+    asyncio.run(check())
+
+
+def test_project_groups_lazy_journal_images_and_physical_deletion(
+    browser_server, monkeypatch
+):
+    from playwright.async_api import async_playwright, expect
+    from test_images import png_bytes
+    from web.services import images as image_files
+
+    generated = []
+
+    def relay(**kwargs):
+        generated.append(kwargs)
+        path = image_files.OUTPUT_DIR / f"purge_browser_{len(generated)}.png"
+        path.write_bytes(png_bytes())
+        return {"image_url": f"/outputs/{path.name}"}
+
+    monkeypatch.setattr(images, "relay_generate_raw", relay)
+
+    async def check():
+        errors, asset_requests = [], []
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                executable_path="/usr/bin/google-chrome", args=["--no-sandbox"]
+            )
+            page = await browser.new_page(viewport={"width": 1440, "height": 1100})
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.on("dialog", lambda dialog: dialog.accept())
+            page.on(
+                "request",
+                lambda request: asset_requests.append(request.url)
+                if "/photodream/outputs/" in request.url
+                or "/photodream/uploads/" in request.url
+                else None,
+            )
+            assert (
+                await page.request.post(
+                    browser_server + "/photodream/api/auth/register",
+                    data={
+                        "username": "asset_manager",
+                        "password": "browser-password-123",
+                    },
+                )
+            ).status == 201
+            projects = []
+            for name in ("电影甲", "电影乙"):
+                project = await (
+                    await page.request.post(
+                        browser_server + "/photodream/api/projects", form={"name": name}
+                    )
+                ).json()
+                projects.append(project)
+                response = await page.request.post(
+                    browser_server + f"/photodream/api/projects/{project['id']}/cards",
+                    multipart={
+                        "card_type": "scene",
+                        "name": name + "场景",
+                        "content": "日落",
+                        "image": {
+                            "name": "scene.png",
+                            "mimeType": "image/png",
+                            "buffer": png_bytes(),
+                        },
+                    },
+                )
+                assert response.status == 200
+                assert (
+                    await page.request.post(
+                        browser_server + "/photodream/api/generate",
+                        form={"project_id": project["id"], "prompt": name + "提示词"},
+                    )
+                ).status == 200
+            await page.goto(browser_server + "/photodream/#generations")
+            await expect(
+                page.locator("#journalGrid .project-resource-group")
+            ).to_have_count(2)
+            await expect(page.locator("#journalGrid img")).to_have_count(0)
+            assert not asset_requests
+            await page.locator("#journalProject").select_option(projects[0]["id"])
+            await expect(page.locator(".generation-card")).to_have_count(1)
+            assert not asset_requests
+            await page.locator("[data-generation]").click()
+            await expect(
+                page.locator("#journalDetailBody .journal-output img")
+            ).to_be_visible()
+            await expect(
+                page.locator("#journalDetailBody textarea").nth(1)
+            ).to_have_value("电影甲提示词")
+            screenshots = Path("/tmp/photodream-project-resource-review")
+            screenshots.mkdir(exist_ok=True)
+            await page.screenshot(path=str(screenshots / "journal-detail-desktop.png"))
+            output = "/outputs/purge_browser_1.png"
+            await page.locator(f'[data-purge-image="{output}"]').click()
+            await expect(page.locator(".journal-output")).to_contain_text(
+                "图片已彻底删除"
+            )
+            assert not (image_files.OUTPUT_DIR / "purge_browser_1.png").exists()
+            assert (
+                await page.request.get(browser_server + "/photodream" + output)
+            ).status == 404
+            await expect(
+                page.locator("#journalDetailBody .journal-output img")
+            ).to_have_count(0)
+            await expect(
+                page.locator("#journalDetailBody textarea").nth(1)
+            ).to_have_value("电影甲提示词")
+            await page.locator("#journalClose").click()
+            await expect(page.locator("#journalDetailBody img")).to_have_count(0)
+            await page.locator('.console-side a[href="/photodream/#resources"]').click()
+            await expect(
+                page.locator("#resourceGrid .project-resource-group")
+            ).to_have_count(2)
+            await page.locator("#resourceProject").select_option(projects[0]["id"])
+            await expect(page.locator(".resource-card")).to_have_count(1)
+            purge_button = page.locator('[data-action="purge-resource"]')
+            card_url = await purge_button.get_attribute("data-image-url")
+            await purge_button.click()
+            await expect(page.locator('[data-action="purge-resource"]')).to_have_count(
+                0
+            )
+            await expect(page.locator(".resource-card")).to_contain_text("日落")
+            assert not (image_files.UPLOAD_DIR / Path(card_url).name).exists()
+            assert (
+                await page.request.get(browser_server + "/photodream" + card_url)
+            ).status == 404
+            assert (
+                await page.locator("#resourceProject").input_value()
+                == projects[0]["id"]
+            )
+            for size in (
+                {"width": 1440, "height": 1100},
+                {"width": 390, "height": 844},
+            ):
+                await page.set_viewport_size(size)
+                assert await page.evaluate(
+                    "document.documentElement.scrollWidth <= innerWidth"
+                )
+                await page.screenshot(
+                    path=str(screenshots / f"resources-{size['width']}.png")
+                )
             assert not errors, errors
             await browser.close()
 

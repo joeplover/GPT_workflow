@@ -58,6 +58,9 @@ def mutate_project(
     operation: str = "project.update",
 ) -> dict[str, Any]:
     with Session(get_engine()) as session, session.begin():
+        from .services.assets import assert_available, lock_assets
+
+        lock_assets(session)
         row = session.scalar(
             select(Project).where(Project.id == project_id).with_for_update()
         )
@@ -67,6 +70,7 @@ def mutate_project(
         document = normalize_project(deepcopy(row.document))
         before = deepcopy(document)
         change(document)
+        assert_available(session, document)
         changes = document_changes(before, document)
         if changes:
             session.add(

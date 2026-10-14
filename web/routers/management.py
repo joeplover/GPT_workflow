@@ -422,6 +422,10 @@ def authorize_asset(url: str):
         )
     )
     with Session(database.get_engine()) as session:
+        from ..models import AssetDeletion
+
+        if session.get(AssetDeletion, url):
+            raise HTTPException(404, "图片已被彻底删除。")
         scope = project_scope(require_actor())
         if session.scalar(select(Project.id).where(scope, predicate).limit(1)):
             return

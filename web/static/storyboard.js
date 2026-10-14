@@ -101,7 +101,7 @@ function renderCards() {
 }
 function renderLibrary() {
   const cards = referenceCards();
-  $("libraryCards").innerHTML = cards.length ? cards.map((card) => `<div class="card-resource">${cardMarkup(card, state.librarySelection.has(card.id), state.applyingCards || Boolean(state.deletingFrame))}${Studio.cardActions(card, card.type, state.applyingCards || state.frames.some(f => busy(f) && (content(f)[`${card.type}_card_ids`] || []).includes(card.id)))}</div>`).join("") : '<p class="hint">暂无参考卡，点击上方按钮创建。</p>';
+  $("libraryCards").innerHTML = cards.length ? cards.map((card) => `<div class="card-resource">${cardMarkup(card, state.librarySelection.has(card.id), state.applyingCards || Boolean(state.deletingFrame))}${Studio.cardActions(card, card.type, state.applyingCards || state.frames.some(f => busy(f) && (content(f)[`${card.type}_card_ids`] || []).includes(card.id)), "storyboard")}</div>`).join("") : '<p class="hint">暂无参考卡，点击上方按钮创建。</p>';
   for (const id of ["createCharacterCard", "createSceneCard", "libraryAll", "libraryNone"]) $(id).disabled = !state.project || state.loadingProject || state.applyingCards || Boolean(state.deletingFrame);
   $("applyCards").disabled = !state.frames.length || !state.librarySelection.size || state.loadingProject || state.applyingCards || Boolean(state.deletingFrame);
   $("applyCards").textContent = `应用到镜头…${state.librarySelection.size ? `（${state.librarySelection.size} 张卡）` : ""}`;
@@ -163,7 +163,7 @@ function renderPreview() {
   $("frameError").hidden = !frame?.error;
   $("frameError").textContent = frame?.error || "";
   $("versionsPanel").hidden = !frame?.versions?.length;
-  $("versionList").innerHTML = (frame?.versions || []).map((v, i) => `<div><a class="version-link" href="${escapeHtml(Studio.asset(v.image_url))}" target="_blank" rel="noopener" title="${escapeHtml(v.prompt)}"><img src="${escapeHtml(Studio.asset(v.image_url))}" alt="历史版本 ${i + 1}">版本 ${frame.versions.length - i}</a><a href="${escapeHtml(Studio.downloadUrl(v.image_url))}" download>下载</a></div>`).join("");
+  $("versionList").innerHTML = (frame?.versions || []).map((v, i) => `<div class="version-item"><a class="version-link" href="${escapeHtml(Studio.asset(v.image_url))}" target="_blank" rel="noopener" title="${escapeHtml(v.prompt)}"><img src="${escapeHtml(Studio.asset(v.image_url))}" alt="历史版本 ${i + 1}">版本 ${frame.versions.length - i}</a><a class="text-button version-download" href="${escapeHtml(Studio.downloadUrl(v.image_url))}" download>下载</a></div>`).join("");
 }
 function renderEditor() {
   const frame = currentFrame(), item = frame ? content(frame) : {}, disabled = !frame || busy(frame) || state.applyingCards || Boolean(state.deletingFrame) || state.loadingProject;

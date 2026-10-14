@@ -63,10 +63,14 @@ def start_generation(
         "actor_name": actor.display_name if actor else "",
     }
     with Session(database.get_engine()) as session, session.begin():
+        from .assets import assert_available, lock_assets
+
+        lock_assets(session)
         row = session.get(Project, project["id"])
         if not row:
             raise HTTPException(404, "项目不存在。")
         require_project_access(session, row)
+        assert_available(session, snapshot)
         record = ImageGeneration(
             generation_key=uuid.uuid4().hex,
             project_id=project["id"],
