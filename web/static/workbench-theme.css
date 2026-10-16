@@ -14,6 +14,9 @@
 .topbar__row { flex-wrap:wrap; gap:9px; }
 .topbar__input,.topbar__select,.field-input,input,select,textarea { background:#111814; color:var(--text); border-color:var(--line); }
 .topbar__status { color:var(--muted); }
+.api-profile-info { margin:0; padding:8px 24px; color:var(--muted); font-size:12px; overflow-wrap:anywhere; border-bottom:1px solid var(--line); }
+#apiProfileInfo { overflow-wrap:anywhere; }
+#apiProfileSelect { max-width:100%; }
 .field-input:focus,input:focus,select:focus,textarea:focus { border-color:var(--accent2); box-shadow:0 0 0 2px #a6e0bb20; }
 .workspace { min-height:0; max-width:none; grid-template-columns:224px minmax(0,1fr); }
 .sidebar { padding:24px 18px; background:#141a16; }

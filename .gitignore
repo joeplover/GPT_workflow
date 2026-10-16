@@ -19,3 +19,4 @@ __pycache__/
 /web/runtime/*.log
 /web/runtime/history.json
 /web/runtime/projects.json
+/web/runtime/secrets/

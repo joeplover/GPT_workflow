@@ -69,6 +69,8 @@ async def check(args):
                 "display_name": "测试用户",
                 "is_admin": False,
             }
+        elif path == "/photodream/api/settings/api-profiles":
+            data = {"profiles": [], "selected_id": ""}
         elif path == "/photodream/api/config":
             data = {
                 "base_url": "http://test-relay/v1",

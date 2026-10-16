@@ -45,6 +45,114 @@ def browser_server(environment, monkeypatch):
         sock.close()
 
 
+def test_named_api_profiles_settings_and_workbench_selection(browser_server):
+    from playwright.async_api import async_playwright, expect
+
+    async def check():
+        errors = []
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                executable_path="/usr/bin/google-chrome", args=["--no-sandbox"]
+            )
+            context = await browser.new_context(
+                viewport={"width": 1440, "height": 1000}
+            )
+            registered = await context.request.post(
+                browser_server + "/photodream/api/auth/register",
+                data={
+                    "username": "profile_browser",
+                    "password": "browser-password-123",
+                },
+            )
+            assert registered.status == 201
+            page = await context.new_page()
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            await page.goto(browser_server + "/photodream/#account")
+            settings = page.locator("#apiProfilesSection")
+            await expect(settings.locator("#apiProfileForm")).to_be_hidden()
+            for name, url, key in [
+                ("主力接口", "https://primary.example/v1", "browser-primary-secret"),
+                ("备用接口", "https://backup.example/v1", "browser-backup-secret"),
+            ]:
+                await settings.locator("#newApiProfile").click()
+                await settings.locator('[name="name"]').fill(name)
+                await settings.locator('[name="base_url"]').fill(url)
+                await settings.locator('[name="api_key"]').fill(key)
+                await settings.locator('[type="submit"]').click()
+                await expect(settings.locator("#apiProfileForm")).to_be_hidden()
+                await expect(settings.locator("#apiProfileList")).to_contain_text(name)
+            data = await (
+                await context.request.get(
+                    browser_server + "/photodream/api/settings/api-profiles"
+                )
+            ).json()
+            first = next(p for p in data["profiles"] if p["name"] == "主力接口")
+            second = next(p for p in data["profiles"] if p["name"] == "备用接口")
+            await settings.locator(
+                f'[data-profile-action="edit"][data-profile-id="{first["id"]}"]'
+            ).click()
+            await expect(settings.locator('[name="api_key"]')).to_have_value("")
+            await settings.locator('[name="name"]').fill("主力接口 · 已改名")
+            await settings.locator('[type="submit"]').click()
+            await expect(settings.locator("#apiProfileList")).to_contain_text(
+                "主力接口 · 已改名"
+            )
+            await settings.locator(
+                f'[data-profile-action="select"][data-profile-id="{second["id"]}"]'
+            ).click()
+            await expect(settings.locator("#apiProfileList .tag")).to_have_text(
+                "当前使用"
+            )
+            await page.locator('.studio-links a[href="/photodream/single"]').click()
+            single = page.locator('studio-workbench[data-workbench="single"]')
+            await expect(single.locator("#apiProfileSelect")).to_have_value(
+                second["id"]
+            )
+            await expect(single.locator("#apiKey, #baseUrl")).to_have_count(0)
+            await single.locator("#apiProfileSelect").select_option(first["id"])
+            await expect(single.locator("#apiProfileInfo")).to_have_text(
+                first["base_url"]
+            )
+            await page.locator('.studio-links a[href="/photodream/storyboard"]').click()
+            storyboard = page.locator('studio-workbench[data-workbench="storyboard"]')
+            await expect(storyboard.locator("#apiProfileSelect")).to_have_value(
+                first["id"]
+            )
+            await expect(storyboard.locator("#apiKey, #baseUrl")).to_have_count(0)
+            await page.reload()
+            await expect(storyboard.locator("#apiProfileSelect")).to_have_value(
+                first["id"]
+            )
+            await page.evaluate("window.settingsNavigationMarker = true")
+            await storyboard.locator("#manageApiProfiles").click()
+            await expect(settings).to_be_visible()
+            assert await page.evaluate("window.settingsNavigationMarker === true")
+            page.once("dialog", lambda dialog: dialog.accept())
+            await settings.locator(
+                f'[data-profile-action="delete"][data-profile-id="{first["id"]}"]'
+            ).click()
+            await expect(settings.locator("#apiProfileList")).not_to_contain_text(
+                "主力接口"
+            )
+            await page.locator('.studio-links a[href="/photodream/storyboard"]').click()
+            await expect(storyboard.locator("#apiProfileSelect")).to_have_value("")
+            await storyboard.locator("#manageApiProfiles").click()
+            await page.set_viewport_size({"width": 390, "height": 844})
+            await settings.locator("#newApiProfile").click()
+            assert await page.evaluate(
+                "document.documentElement.scrollWidth <= innerWidth"
+            ), "settings mobile overflow"
+            stored = await page.evaluate("JSON.stringify(localStorage)")
+            assert (
+                "browser-primary-secret" not in stored
+                and "browser-backup-secret" not in stored
+            )
+            assert not errors, errors
+            await browser.close()
+
+    asyncio.run(check())
+
+
 def test_console_registration_projects_teams_resources_and_workbenches(browser_server):
     from playwright.async_api import async_playwright, expect
 

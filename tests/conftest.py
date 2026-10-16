@@ -52,6 +52,8 @@ def environment(tmp_path, monkeypatch):
     monkeypatch.setenv("HICODE_API_KEY", "server-test-secret")
     monkeypatch.setenv("HICODE_MAX_PROJECT_SHOTS", "200")
     monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    monkeypatch.delenv("PHOTODREAM_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("PHOTODREAM_ENCRYPTION_KEY_FILE", raising=False)
     try:
         yield tmp_path, engine
     finally:

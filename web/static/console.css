@@ -1,6 +1,12 @@
 :root { color-scheme: dark; --c-bg:#101413; --c-panel:#181e1b; --c-line:#2b3630; --c-ink:#e9f0eb; --c-muted:#95a59b; --c-green:#a6e0bb; }
 * { box-sizing:border-box; }
 [hidden] { display:none !important; }
+.api-profile-settings { max-width:1000px; margin-top:20px; min-width:0; }
+.api-profile-settings .page-head { margin-bottom:12px; }
+.api-profile-settings .page-head h2 { margin-bottom:8px; }
+.api-profile-settings .c-form { max-width:620px; margin:20px 0 28px; }
+.api-profile-url { max-width:340px; overflow-wrap:anywhere; }
+.api-profile-default { align-items:center; margin-top:18px; }
 .studio-nav { position:relative; z-index:40; display:flex; align-items:center; gap:28px; min-height:66px; padding:14px 28px; background:#151c18; border-bottom:1px solid var(--c-line); font:14px/1.5 system-ui,sans-serif; color:var(--c-ink); }
 .studio-nav a { color:inherit; text-decoration:none; margin-right:0; }
 .studio-logo { display:flex; align-items:center; gap:8px; white-space:nowrap; }.studio-logo span { color:var(--c-muted); font-size:12px; }

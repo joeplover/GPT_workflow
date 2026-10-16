@@ -107,6 +107,23 @@ class UserSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class UserApiProfile(Base):
+    """Private credentials; api_key contains authenticated ciphertext only."""
+
+    __tablename__ = "user_api_profiles"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(100))
+    base_url: Mapped[str] = mapped_column(String(2048))
+    api_key: Mapped[str] = mapped_column(String)
+    selected: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Team(Base):
     __tablename__ = "teams"
     id: Mapped[str] = mapped_column(String, primary_key=True)

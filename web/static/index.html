@@ -14,13 +14,14 @@
   <span class="topbar__title">单图工作台</span>
   <a class="text-link" href="/photodream/storyboard">胶片分镜工作台 →</a>
   <div class="topbar__row">
-    <input id="apiKey" type="password" placeholder="API Key" class="topbar__input">
-    <input id="baseUrl" placeholder="接口地址" class="topbar__input topbar__input--url">
+    <select id="apiProfileSelect" class="topbar__select" aria-label="接口配置"><option value="">加载接口配置…</option></select>
+    <a id="manageApiProfiles" class="text-link" href="/photodream/#account">管理接口</a>
     <select id="projectSelect" class="topbar__select"></select>
     <input id="projectName" placeholder="新项目名称" class="topbar__input topbar__input--proj">
     <span id="configStatus" class="topbar__status">加载中...</span>
   </div>
 </header>
+<p id="apiProfileInfo" class="api-profile-info" role="status"></p>
 
 <div class="main">
   <div class="left">

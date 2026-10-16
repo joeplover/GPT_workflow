@@ -46,6 +46,7 @@ class FrameInput(BaseModel):
 class GenerationInput(FrameInput):
     api_key: str = ""
     base_url: str = ""
+    api_profile_id: str = ""
 
 
 class ApplyCardsInput(BaseModel):
@@ -240,7 +241,9 @@ def generate_frame(
         raise HTTPException(400, "请填写这个镜头的提示词。")
     validated = normalize_generation_args(body.model, body.size)
     body = body.model_copy(update=validated)
-    settings = resolve_runtime_settings(body.api_key, body.base_url)
+    settings = resolve_runtime_settings(
+        body.api_key, body.base_url, body.api_profile_id
+    )
     if not settings["api_key"]:
         raise HTTPException(400, "请填写 API Key，或配置服务端 Key。")
     generation_id = uuid.uuid4().hex
@@ -250,7 +253,9 @@ def generate_frame(
         require_idle(frame)
         validate_cards(project, body)
         frame.update(
-            body.model_dump(exclude={"api_key", "base_url", "marked"}),
+            body.model_dump(
+                exclude={"api_key", "base_url", "api_profile_id", "marked"}
+            ),
             status="generating",
             error="",
             generation_id=generation_id,

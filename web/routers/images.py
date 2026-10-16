@@ -1,6 +1,5 @@
 """Generation and editing endpoints; blocking work uses FastAPI's thread pool."""
 
-import traceback
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,6 +14,7 @@ from ..services.journal import (
     complete_generation,
     fail_generation,
     update_source,
+    safe_error,
 )
 from ..services.images import (
     build_reference_collage,
@@ -40,6 +40,7 @@ router = APIRouter(prefix="/api", tags=["images"])
 def generate_image(
     api_key: str = Form(""),
     base_url: str = Form(""),
+    api_profile_id: str = Form(""),
     project_id: str = Form(""),
     project_name: str = Form(""),
     synopsis: Optional[str] = Form(None),
@@ -56,7 +57,9 @@ def generate_image(
         raise HTTPException(status_code=400, detail="Prompt is required.")
     validated = normalize_generation_args(model, size)
 
-    settings = resolve_runtime_settings(api_key=api_key, base_url=base_url)
+    settings = resolve_runtime_settings(
+        api_key=api_key, base_url=base_url, api_profile_id=api_profile_id
+    )
     if not settings["api_key"]:
         raise HTTPException(status_code=400, detail="Missing API key.")
 
@@ -202,24 +205,29 @@ def generate_image(
     except requests.exceptions.SSLError as exc:
         fail_generation(record_id, exc, settings["api_key"])
         raise HTTPException(
-            status_code=502, detail=f"SSL error while calling relay API: {exc}"
+            status_code=502,
+            detail=f"SSL error while calling relay API: {safe_error(exc, settings['api_key'])}",
         ) from exc
     except requests.RequestException as exc:
         fail_generation(record_id, exc, settings["api_key"])
         raise HTTPException(
-            status_code=502, detail=f"Relay API request failed: {exc}"
+            status_code=502,
+            detail=f"Relay API request failed: {safe_error(exc, settings['api_key'])}",
         ) from exc
     except HTTPException as exc:
         fail_generation(record_id, exc, settings["api_key"])
         print(
-            f"[ERROR][{request_id}] HTTPException status={exc.status_code} detail={exc.detail}"
+            f"[ERROR][{request_id}] HTTPException status={exc.status_code} detail={safe_error(exc, settings['api_key'])}"
         )
-        raise
+        raise HTTPException(
+            exc.status_code, safe_error(exc, settings["api_key"])
+        ) from exc
     except Exception as exc:
         fail_generation(record_id, exc, settings["api_key"])
-        print(f"[ERROR][{request_id}] Unexpected error: {exc}")
-        print(traceback.format_exc())
-        raise
+        print(
+            f"[ERROR][{request_id}] Unexpected error: {safe_error(exc, settings['api_key'])}"
+        )
+        raise HTTPException(502, safe_error(exc, settings["api_key"])) from exc
 
     complete_generation(record_id, result["image_url"])
     print(
@@ -248,6 +256,7 @@ def generate_image(
 def edit_image(
     api_key: str = Form(""),
     base_url: str = Form(""),
+    api_profile_id: str = Form(""),
     project_id: str = Form(""),
     project_name: str = Form(""),
     synopsis: Optional[str] = Form(None),
@@ -265,7 +274,9 @@ def edit_image(
         raise HTTPException(status_code=400, detail="Prompt is required.")
     validated = normalize_generation_args(model, size)
 
-    settings = resolve_runtime_settings(api_key=api_key, base_url=base_url)
+    settings = resolve_runtime_settings(
+        api_key=api_key, base_url=base_url, api_profile_id=api_profile_id
+    )
     if not settings["api_key"]:
         raise HTTPException(status_code=400, detail="Missing API key.")
 
@@ -378,16 +389,19 @@ def edit_image(
     except requests.exceptions.SSLError as exc:
         fail_generation(record_id, exc, settings["api_key"])
         raise HTTPException(
-            status_code=502, detail=f"SSL error while calling relay edit API: {exc}"
+            status_code=502,
+            detail=f"SSL error while calling relay edit API: {safe_error(exc, settings['api_key'])}",
         ) from exc
     except requests.RequestException as exc:
         fail_generation(record_id, exc, settings["api_key"])
         raise HTTPException(
-            status_code=502, detail=f"Relay edit API request failed: {exc}"
+            status_code=502,
+            detail=f"Relay edit API request failed: {safe_error(exc, settings['api_key'])}",
         ) from exc
     except Exception as exc:
         fail_generation(record_id, exc, settings["api_key"])
-        raise
+        status = exc.status_code if isinstance(exc, HTTPException) else 502
+        raise HTTPException(status, safe_error(exc, settings["api_key"])) from exc
 
     complete_generation(record_id, result["image_url"])
     return add_shot_to_project(

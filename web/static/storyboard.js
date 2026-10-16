@@ -1,6 +1,9 @@
+import {mountSelector} from "/photodream/static/api-profiles.js";
+
 export function mount(root, Studio, ImageSettings, initialProjectId = "") {
 let active = false;
 const lifetime = new AbortController();
+const apiProfiles = mountSelector(root, Studio, lifetime.signal);
 function listen(target, type, listener) { target.addEventListener(type, listener, {signal:lifetime.signal}); }
 "use strict";
 
@@ -45,7 +48,7 @@ function keepaliveOptions(data) { return { signal: AbortSignal.timeout(15000), k
 
 function rememberWorkspace() {
   const id = state.project?.id; if (!id || state.loadingProject) return;
-  const draft = { selected_frame_id: state.selectedId, library_selection: [...state.librarySelection], base_url: $("baseUrl").value.trim(), card_draft: state.cardDraft };
+  const draft = { selected_frame_id: state.selectedId, library_selection: [...state.librarySelection], card_draft: state.cardDraft };
   state.workspaceDrafts.set(id, draft); writeLocal(`workspace:${id}`, draft);
   clearTimeout(state.workspaceTimers.get(id));
   state.workspaceTimers.set(id, setTimeout(() => saveWorkspace(id).catch(() => {}), 300));
@@ -282,8 +285,11 @@ function enqueue(frame) {
     message(`「${body.title}」需要有效模型与分辨率，例如 1920x1080。`, true); return false;
   }
   const projectId = state.project.id, key = currentKey(frame);
+  let apiProfileId;
+  try { apiProfileId = apiProfiles.selection(); }
+  catch (error) { message(error.message, true); return false; }
   const job = { key, projectId, frameId: frame.id, status: "queued", body: {
-    ...body, api_key: $("apiKey").value.trim(), base_url: $("baseUrl").value.trim(),
+    ...body, api_profile_id: apiProfileId,
   } };
   state.jobs.set(key, job); state.queue.push(job); state.epoch++;
   return true;
@@ -374,7 +380,6 @@ $("libraryCards").addEventListener("click", async event => {
   finally { button.disabled = false; }
 });
 $("libraryNone").addEventListener("click", () => { state.librarySelection.clear(); renderLibrary(); rememberWorkspace(); });
-$("baseUrl").addEventListener("input", rememberWorkspace);
 $("operationPanel").addEventListener("toggle", async () => {
   if (!$("operationPanel").open || !state.project) return;
   const projectId = state.project.id;
@@ -463,7 +468,6 @@ async function switchProject(id) {
     const workspace = state.workspaceDrafts.get(id) || readLocal(`workspace:${id}`) || project?.workspace || {};
     state.selectedId = frames.some((f) => f.id === workspace.selected_frame_id) ? workspace.selected_frame_id : frames[0]?.id || "";
     state.librarySelection = new Set((workspace.library_selection || []).filter((cardId) => referenceCards().some((c) => c.id === cardId)));
-    $("baseUrl").value = workspace.base_url ?? state.config.base_url;
     state.cardDraft = workspace.card_draft || { card_type: "character", name: "", content: "" };
     for (const frame of frames) {
       const key = keyFor(id, frame.id), draft = readLocal(`draft:${key}`);
@@ -602,8 +606,7 @@ async function init() {
       const form = new FormData(); form.append("name", "分镜项目");
       state.projects.push(await api("/photodream/api/projects", { method: "POST", body: form }));
     }
-    $("baseUrl").value = config.base_url;
-    $("apiKey").placeholder = config.has_api_key ? "已配置服务端 Key，可留空" : "填写 API Key";
+    await apiProfiles.refresh(config);
     ImageSettings.init(config);
     const id = initialProjectId || readLocal("last-project");
     await switchProject(projects.some((p) => p.id === id) ? id : projects[0]?.id || "");
@@ -626,6 +629,7 @@ return {
   ready,
   async activate(projectId) {
     active = true;
+    await apiProfiles.refresh();
     if (projectId && projectId !== state.project?.id) {
       state.projects = await Studio.api("/photodream/api/projects"); await switchProject(projectId);
     }

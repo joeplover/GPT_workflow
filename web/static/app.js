@@ -1,6 +1,9 @@
+import {mountSelector} from "/photodream/static/api-profiles.js";
+
 export function mount(root, Studio, ImageSettings, initialProjectId = "") {
 let active = false;
 const lifetime = new AbortController();
+const apiProfiles = mountSelector(root, Studio, lifetime.signal);
 function listen(target, type, listener) { target.addEventListener(type, listener, {signal:lifetime.signal}); }
 const state = {
   config: null,
@@ -12,8 +15,6 @@ const els = {
   submitBtn: root.getElementById("submitBtn"),
   submitStatus: root.getElementById("submitStatus"),
   configStatus: root.getElementById("configStatus"),
-  apiKey: root.getElementById("apiKey"),
-  baseUrl: root.getElementById("baseUrl"),
   projectSelect: root.getElementById("projectSelect"),
   projectName: root.getElementById("projectName"),
   characterName: root.getElementById("characterName"),
@@ -401,12 +402,12 @@ function updateReferencePreview() {
 async function loadConfig() {
   const data = await Studio.cached("/photodream/api/config",600000);
   state.config = data;
-  els.baseUrl.value = data.base_url || "https://api.hi-code.cc/v1";
+  await apiProfiles.refresh(data);
   ImageSettings.init(data);
   els.model.value = data.default_model;
   els.size.value = data.default_size;
   ImageSettings.syncSize();
-  els.configStatus.textContent = data.has_api_key ? `接口已就绪：${data.base_url}` : "未填写 API Key";
+  els.configStatus.textContent = "接口配置按当前用户独立保存";
 }
 
 async function loadProjects() {
@@ -538,13 +539,13 @@ async function submitForm(event) {
   els.submitBtn.disabled = true;
 
   try {
+    const apiProfileId = apiProfiles.selection();
     if (!state.currentProjectId && !els.projectName.value.trim()) els.projectName.value = "单图项目";
     await ensureActiveProject();
     rememberSingleDraft();
     await saveSingleDraft(state.currentProjectId);
     const formData = new FormData();
-    formData.append("api_key", els.apiKey.value.trim());
-    formData.append("base_url", els.baseUrl.value.trim());
+    formData.append("api_profile_id", apiProfileId);
     formData.append("project_id", state.currentProjectId);
     formData.append("project_name", els.projectName.value.trim());
     formData.append("prompt", els.prompt.value.trim());
@@ -680,6 +681,7 @@ return {
   ready,
   async activate(projectId) {
     active = true;
+    await apiProfiles.refresh();
     if (projectId && projectId !== state.currentProjectId) {
       flushSingleDrafts(); state.currentProjectId = projectId;
       resetProjectEditor();

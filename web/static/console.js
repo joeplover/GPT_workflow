@@ -83,10 +83,14 @@
       $("memberTable").innerHTML = `<table class="c-table"><thead><tr><th>成员</th><th>用户名</th><th>角色</th><th>操作</th></tr></thead><tbody>${members.map(m => `<tr><td>${e(m.display_name)}</td><td>${e(m.username)}</td><td>${roles[m.role]}</td><td>${m.role !== "owner" && team.role === "owner" ? `<button data-action="role" data-id="${e(m.id)}" data-team="${e(team.id)}" data-role="${m.role === "admin" ? "member" : "admin"}">${m.role === "admin" ? "设为成员" : "设为管理员"}</button> ` : ""}${manage && m.role !== "owner" && (team.role === "owner" || m.role === "member") ? `<button class="danger" data-action="remove-member" data-id="${e(m.id)}" data-team="${e(team.id)}">移除</button>` : ""}</td></tr>`).join("")}</tbody></table>`;
     }
   }
-  function accountPage() {
+  async function accountPage() {
     $("consoleView").innerHTML = heading("账号设置", "管理显示名称与登录密码。修改密码后，所有已登录会话会退出。") + `<div class="account-grid"><section class="c-panel"><h2>个人资料</h2><form id="profileForm" class="c-form"><label>用户名<input value="${e(Studio.user.username)}" disabled></label><label>显示名称<input name="display_name" required maxlength="100" value="${e(Studio.user.display_name)}"></label><button class="primary">保存资料</button></form></section><section class="c-panel"><h2>修改密码</h2><form id="passwordForm" class="c-form"><label>当前密码<input type="password" name="current_password" autocomplete="current-password" required maxlength="128"></label><label>新密码<input type="password" name="new_password" autocomplete="new-password" required minlength="10" maxlength="128"></label><label>确认新密码<input type="password" name="confirm_password" autocomplete="new-password" required minlength="10" maxlength="128"></label><button class="primary">更新密码并退出</button></form></section></div>`;
     $("profileForm").onsubmit = async event => { event.preventDefault(); try { Object.assign(Studio.user, await Studio.post("/photodream/api/auth/profile", Object.fromEntries(new FormData(event.currentTarget)))); document.querySelector(".studio-account a").textContent = Studio.user.display_name; notify("资料已保存。"); } catch (error) { notify(error.message,true); } };
     $("passwordForm").onsubmit = async event => { event.preventDefault(); try { const data = Object.fromEntries(new FormData(event.currentTarget)); if (data.new_password !== data.confirm_password) throw new Error("两次新密码不一致。"); delete data.confirm_password; await Studio.post("/photodream/api/auth/password",data); location.assign("/photodream/login"); } catch (error) { notify(error.message,true); } };
+    const section = document.createElement("section"); section.className = "c-panel api-profile-settings"; section.id = "apiProfilesSection";
+    $("consoleView").append(section);
+    const module = await import("/photodream/static/api-profiles.js");
+    if (section.isConnected) await module.mountSettings(section, Studio);
   }
   async function usersPage() {
     if (!Studio.user.is_admin) { location.hash = "overview"; return; }

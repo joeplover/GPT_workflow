@@ -6,3 +6,4 @@ SQLAlchemy==2.0.43
 psycopg[binary]==3.2.10
 requests==2.32.3
 pillow==10.4.0
+cryptography==50.0.2

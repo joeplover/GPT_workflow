@@ -56,8 +56,10 @@ def initialize_database() -> None:
             text("CREATE INDEX IF NOT EXISTS ix_projects_team_id ON projects(team_id)")
         )
         with Session(bind=connection) as session:
+            from .credential_crypto import initialize_api_key_encryption
             from .services.journal import backfill_history
 
+            initialize_api_key_encryption(session)
             if session.get(Migration, LEGACY_MIGRATION) or not PROJECTS_FILE.exists():
                 backfill_history(session)
                 return

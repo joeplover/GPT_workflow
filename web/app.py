@@ -12,7 +12,17 @@ from starlette._utils import get_route_path
 
 from .config import APP_PREFIX, OUTPUT_DIR, RUNTIME_DIR, STATIC_DIR, UPLOAD_DIR
 from .database import dispose_database, initialize_database
-from .routers import assets, auth, frames, images, journal, management, projects, system
+from .routers import (
+    api_profiles,
+    assets,
+    auth,
+    frames,
+    images,
+    journal,
+    management,
+    projects,
+    system,
+)
 from .security import COOKIE_NAME, current_actor, session_actor
 
 
@@ -96,6 +106,7 @@ def create_app() -> FastAPI:
     application.include_router(images.router)
     application.include_router(frames.router)
     application.include_router(auth.router)
+    application.include_router(api_profiles.router)
     application.include_router(management.router)
     application.include_router(journal.router)
     application.include_router(assets.router)

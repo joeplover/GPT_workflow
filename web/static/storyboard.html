@@ -26,10 +26,10 @@
 
       <details class="settings" open>
         <summary>接口设置</summary>
-        <label class="label" for="apiKey">API Key</label>
-        <input id="apiKey" type="password" placeholder="使用服务端 Key" autocomplete="off">
-        <label class="label" for="baseUrl">接口地址</label>
-        <input id="baseUrl" type="url" placeholder="https://api.hi-code.cc/v1">
+        <label class="label" for="apiProfileSelect">接口配置</label>
+        <select id="apiProfileSelect" aria-label="接口配置"><option value="">加载接口配置…</option></select>
+        <p id="apiProfileInfo" class="hint" role="status"></p>
+        <a id="manageApiProfiles" class="text-button" href="/photodream/#account">管理接口配置 →</a>
       </details>
 
       <details id="operationPanel" class="settings"><summary>操作记录</summary><p class="hint">查看已保存的修改和生成记录。</p><div id="operationList" class="hint">展开后加载。</div></details>
