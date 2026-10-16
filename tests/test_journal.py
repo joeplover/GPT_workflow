@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import pytest
 import requests
 from fastapi import HTTPException
 from sqlalchemy import delete, select
@@ -147,11 +146,12 @@ def test_output_archived_even_when_project_update_fails(client, monkeypatch):
         raise RuntimeError("project update failed")
 
     monkeypatch.setattr(images, "add_shot_to_project", cannot_associate)
-    with pytest.raises(RuntimeError, match="project update failed"):
-        client.post(
-            "/photodream/api/generate",
-            data={"project_id": project["id"], "prompt": "已生成但关联失败"},
-        )
+    response = client.post(
+        "/photodream/api/generate",
+        data={"project_id": project["id"], "prompt": "已生成但关联失败"},
+    )
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "INTERNAL_ERROR"
     item = client.get("/photodream/api/generations").json()["items"][0]
     assert item["status"] == "succeeded"
     assert (

@@ -377,6 +377,9 @@ async def check(args):
         await expect(page.locator("#progress")).to_have_text(
             "3 / 5 已完成", timeout=10000
         )
+        await expect(page.locator("#systemErrorDialog")).to_be_visible()
+        await expect(page.locator("#systemErrorList")).to_contain_text("测试上游失败，可重试")
+        await page.locator("#dismissSystemError").click()
         assert maximum == 4, maximum
         assert calls == 4
         assert frames[4]["image_url"] is None
@@ -576,12 +579,15 @@ async def check(args):
         await page.locator("#size").fill("1920x")
         await page.wait_for_timeout(600)
         assert frames[0]["prompt"] == ""
+        await expect(page.locator("#systemErrorDialog")).to_be_visible()
         await page.reload()
         await expect(page.locator("#prompt")).to_have_value(
             "断网时写下的画面，刷新后仍在"
         )
         await expect(page.locator("#systemPrompt")).to_have_value("断网时的系统提示词")
         await expect(page.locator("#size")).to_have_value("1920x")
+        await expect(page.locator("#systemErrorDialog")).to_be_visible()
+        await page.locator("#dismissSystemError").click()
         fail_frame_saves = False
         await page.evaluate("window.dispatchEvent(new Event('online'))")
         await expect(page.locator("#saveState")).to_have_text("已保存")

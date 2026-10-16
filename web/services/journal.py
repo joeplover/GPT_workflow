@@ -3,7 +3,6 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
-import re
 import uuid
 
 from fastapi import HTTPException
@@ -11,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import database
+from ..errors import describe_error, redact
 from ..models import ImageGeneration, Migration, Project, ProjectEvent
 from ..security import current_actor, require_project_access
 
@@ -110,13 +110,7 @@ def safe_error(exc, secret=""):
         if isinstance(exc, HTTPException)
         else f"{type(exc).__name__}: {exc}"
     )
-    if secret:
-        value = value.replace(secret, "[已隐藏密钥]")
-    value = re.sub(
-        r"(?i)(bearer\s+|api[_-]?key[\s:=]+)[^\s,;\"']+", r"\1[已隐藏密钥]", value
-    )
-    value = re.sub(r"https?://\S+", "[接口地址已隐藏]", value)
-    return value[:4000]
+    return redact(value, secret)
 
 
 def fail_generation(record_id, exc, secret=""):
@@ -126,7 +120,7 @@ def fail_generation(record_id, exc, secret=""):
         row = session.get(ImageGeneration, record_id, with_for_update=True)
         if row.status in {"generating", "interrupted"}:
             row.status = "failed"
-            row.error = safe_error(exc, secret)
+            row.error = describe_error(exc).message
             row.finished_at = datetime.now(timezone.utc)
 
 

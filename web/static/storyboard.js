@@ -16,13 +16,18 @@ const state = {
   workspaceDrafts: new Map(), workspaceSaves: new Map(), workspaceTimers: new Map(),
   cardDraft: { card_type: "character", name: "", content: "" },
 };
+const syncFailures = new Set();
+function syncFailed(key, error, context) {
+  if (!syncFailures.has(key)) { syncFailures.add(key); Studio.showError(error, {context}); }
+}
 let storagePrefix = "workflow.storyboard.v2:";
+let localStorageFailed = false;
 function readLocal(key) {
   try { return JSON.parse(localStorage.getItem(storagePrefix + key) || "null"); } catch { return null; }
 }
 function writeLocal(key, value) {
-  try { localStorage.setItem(storagePrefix + key, JSON.stringify(value)); }
-  catch { message("浏览器无法保存本地草稿，请等待数据库显示已保存后再关闭页面。", true); }
+  try { localStorage.setItem(storagePrefix + key, JSON.stringify(value)); localStorageFailed = false; }
+  catch { if (!localStorageFailed) { localStorageFailed = true; message("浏览器无法保存本地草稿，请等待数据库显示已保存后再关闭页面。", true); } }
 }
 function removeLocal(key) { try { localStorage.removeItem(storagePrefix + key); } catch { /* Database save already succeeded. */ } }
 function rememberDraft(key, draft) { state.drafts.set(key, draft); writeLocal(`draft:${key}`, draft); }
@@ -35,13 +40,13 @@ const currentKey = (frame) => keyFor(state.project.id, frame.id);
 function content(frame) { return { ...frame, ...(state.drafts.get(currentKey(frame)) || {}) }; }
 function frameStatus(frame) { return state.jobs.get(currentKey(frame))?.status || frame.status; }
 function busy(frame) { return ["queued", "generating"].includes(frameStatus(frame)); }
-function message(text, error = false) { $("status").textContent = text; $("status").dataset.error = String(error); }
+function message(text, error = false, context = "") {
+  if (error) Studio.showError(text, {context});
+  $("status").textContent = error ? "操作未完成，请查看弹窗提示。" : text;
+  $("status").dataset.error = String(error);
+}
 async function api(url, options = {}) {
-  const response = await fetch(url, options);
-  let data;
-  try { data = await response.json(); } catch { throw new Error(`请求失败（HTTP ${response.status}），请检查服务连接`); }
-  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : `请求失败（HTTP ${response.status}）`);
-  return data;
+  return Studio.api(url, options);
 }
 function jsonPost(url, data, options = {}) { return api(url, { ...options, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); }
 function keepaliveOptions(data) { return { signal: AbortSignal.timeout(15000), keepalive: new Blob([JSON.stringify(data)]).size < 60000 }; }
@@ -59,14 +64,15 @@ function saveWorkspace(id) {
   const next = prior.catch(() => {}).then(async () => {
     const draft = state.workspaceDrafts.get(id); if (!draft) return;
     const saved = await jsonPost(`/photodream/api/projects/${id}/workspace`, draft, keepaliveOptions(draft));
+    syncFailures.delete(`workspace:${id}`);
     if (state.project?.id === id) state.project.workspace = saved;
     if (state.workspaceDrafts.get(id) === draft) { state.workspaceDrafts.delete(id); removeLocal(`workspace:${id}`); }
   });
   state.workspaceSaves.set(id, next);
-  next.then(() => { if (state.workspaceSaves.get(id) === next) state.workspaceSaves.delete(id); }, () => {
+  next.then(() => { if (state.workspaceSaves.get(id) === next) state.workspaceSaves.delete(id); }, (error) => {
     if (state.workspaceSaves.get(id) === next) state.workspaceSaves.delete(id);
     if (state.workspaceDrafts.has(id)) state.workspaceTimers.set(id, setTimeout(() => saveWorkspace(id).catch(() => {}), 3000));
-    message("工作区状态暂未同步到数据库，已保留本地副本并自动重试。", true);
+    syncFailed(`workspace:${id}`, error, "工作区同步失败，已保留本地副本并自动重试");
   });
   return next;
 }
@@ -164,7 +170,7 @@ function renderPreview() {
   $("nextFrame").disabled = !frame || index >= state.frames.length - 1;
   $("selectedPosition").textContent = frame ? `${String(index + 1).padStart(2, "0")} / ${String(state.frames.length).padStart(2, "0")}` : "— / —";
   $("frameError").hidden = !frame?.error;
-  $("frameError").textContent = frame?.error || "";
+  $("frameError").textContent = frame?.error ? Studio.errorSummary(frame.error) : "";
   $("versionsPanel").hidden = !frame?.versions?.length;
   $("versionList").innerHTML = (frame?.versions || []).map((v, i) => `<div class="version-item"><a class="version-link" href="${escapeHtml(Studio.asset(v.image_url))}" target="_blank" rel="noopener" title="${escapeHtml(v.prompt)}"><img src="${escapeHtml(Studio.asset(v.image_url))}" alt="历史版本 ${i + 1}">版本 ${frame.versions.length - i}</a><a class="text-button version-download" href="${escapeHtml(Studio.downloadUrl(v.image_url))}" download>下载</a></div>`).join("");
 }
@@ -241,7 +247,7 @@ function toggleMark(frameId) {
   const key = currentKey(frame), projectId = state.project.id;
   rememberDraft(key, { ...frameBody(frame), marked: !content(frame).marked });
   state.epoch++; render();
-  saveDraft(projectId, frameId).catch((error) => message(`标记保存失败：${error.message}`, true));
+  saveDraft(projectId, frameId).catch(() => {});
 }
 
 function editCurrent() {
@@ -254,7 +260,7 @@ function editCurrent() {
   state.epoch++; $("saveState").textContent = "保存中…";
   clearTimeout(state.timers.get(key));
   const projectId = state.project.id;
-  state.timers.set(key, setTimeout(() => saveDraft(projectId, frame.id).catch((error) => message(error.message, true)), 400));
+  state.timers.set(key, setTimeout(() => saveDraft(projectId, frame.id).catch(() => {}), 400));
   renderFilm(); renderPreview();
 }
 function saveDraft(projectId, frameId) {
@@ -264,15 +270,17 @@ function saveDraft(projectId, frameId) {
   const next = prior.catch(() => {}).then(async () => {
     const draft = state.drafts.get(key); if (!draft) return;
     const saved = await jsonPost(`/photodream/api/projects/${projectId}/frames/${frameId}`, draft, keepaliveOptions(draft));
+    syncFailures.delete(key);
     applyFrame(projectId, saved); state.epoch++;
     if (state.drafts.get(key) === draft) { state.drafts.delete(key); removeLocal(`draft:${key}`); }
     if (state.project?.id === projectId) render();
   });
   state.saves.set(key, next);
-  next.then(() => { if (state.saves.get(key) === next) state.saves.delete(key); }, () => {
+  next.then(() => { if (state.saves.get(key) === next) state.saves.delete(key); }, (error) => {
     if (state.saves.get(key) === next) state.saves.delete(key);
     if (state.project?.id === projectId && state.selectedId === frameId) $("saveState").textContent = "同步失败，草稿已保留，正在重试";
     if (state.drafts.has(key)) state.timers.set(key, setTimeout(() => saveDraft(projectId, frameId).catch(() => {}), 3000));
+    syncFailed(key, error, "镜头同步失败，草稿已保留并自动重试");
   });
   return next;
 }
@@ -287,7 +295,7 @@ function enqueue(frame) {
   const projectId = state.project.id, key = currentKey(frame);
   let apiProfileId;
   try { apiProfileId = apiProfiles.selection(); }
-  catch (error) { message(error.message, true); return false; }
+  catch (error) { message(error, true); return false; }
   const job = { key, projectId, frameId: frame.id, status: "queued", body: {
     ...body, api_profile_id: apiProfileId,
   } };
@@ -307,7 +315,7 @@ async function runJob(job) {
       const frame = frames.find((f) => f.id === job.frameId);
       if (frame) applyFrame(job.projectId, frame);
     } catch { /* Polling can recover after a temporary connection loss. */ }
-    message(`「${job.body.title}」：${error.message}`, true);
+    message(error, true, `镜头：${job.body.title}`);
   } finally {
     state.jobs.delete(job.key); state.epoch++; render();
   }
@@ -330,7 +338,7 @@ $("removeFrameImage").addEventListener("click", async () => {
     await saveDraft(projectId, frame.id);
     applyFrame(projectId, await api(`/photodream/api/projects/${projectId}/frames/${frame.id}/image`, {method:"DELETE"}));
     state.epoch++; render(); message("当前图片已移除，历史版本和生成日志已保留。");
-  } catch (error) { message(error.message, true); }
+  } catch (error) { message(error, true); }
   finally { render(); }
 });
 $("batchGenerate").addEventListener("click", () => {
@@ -376,7 +384,7 @@ $("libraryCards").addEventListener("click", async event => {
       }
     }
     render(); rememberWorkspace(); message("参考卡已更新，历史图片和日志已保留。");
-  } catch (error) { message(error.message, true); }
+  } catch (error) { message(error, true); }
   finally { button.disabled = false; }
 });
 $("libraryNone").addEventListener("click", () => { state.librarySelection.clear(); renderLibrary(); rememberWorkspace(); });
@@ -390,7 +398,7 @@ $("operationPanel").addEventListener("toggle", async () => {
     const events = await api(`/photodream/api/projects/${projectId}/events?limit=20`);
     if (state.project?.id !== projectId) return;
     $("operationList").innerHTML = events.length ? events.map((event) => `<p>${escapeHtml(names[event.operation] || "保存修改")}<br><small>${escapeHtml(new Date(event.created_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }))}</small></p>`).join("") : "暂无操作记录。";
-  } catch (error) { $("operationList").textContent = error.message; }
+  } catch (error) { $("operationList").textContent = "操作记录加载失败，请重试。"; Studio.showError(error); }
 });
 
 let cardPreviewUrl;
@@ -415,7 +423,7 @@ $("cardImage").addEventListener("change", () => {
 $("cardForm").addEventListener("submit", async (event) => {
   event.preventDefault(); const projectId = state.project?.id; if (!projectId) return;
   const name = $("cardName").value.trim(), description = $("cardContent").value.trim();
-  if (!name || !description) { $("cardFormError").textContent = "请填写名称和设定描述。"; $("cardFormError").hidden = false; return; }
+  if (!name || !description) { Studio.showError("请填写名称和设定描述。"); return; }
   $("saveCard").disabled = true; $("cardFormError").hidden = true;
   try {
     const form = new FormData(); form.append("card_type", state.cardType); form.append("name", name); form.append("content", description);
@@ -428,7 +436,7 @@ $("cardForm").addEventListener("submit", async (event) => {
     }
     state.cardDraft = { card_type: state.cardType, name: "", content: "" }; rememberWorkspace();
     $("cardDialog").close(); message("参考卡已保存，选择镜头即可应用。");
-  } catch (error) { $("cardFormError").textContent = error.message; $("cardFormError").hidden = false; }
+  } catch (error) { Studio.showError(error); }
   finally { $("saveCard").disabled = false; }
 });
 $("applyCards").addEventListener("click", () => {
@@ -442,7 +450,7 @@ for (const [id, checked] of [["targetsAll", true], ["targetsNone", false]]) $(id
 $("confirmApply").addEventListener("click", async () => {
   const projectId = state.project?.id;
   const frameIds = Array.from($("targetFrames").querySelectorAll("input:checked:not(:disabled)")).map((input) => input.value);
-  if (!frameIds.length) { $("applyError").textContent = "请至少选择一个镜头。"; $("applyError").hidden = false; return; }
+  if (!frameIds.length) { Studio.showError("请至少选择一个镜头。"); return; }
   const cards = referenceCards().filter((card) => state.librarySelection.has(card.id));
   const payload = { frame_ids: frameIds, character_card_ids: cards.filter((card) => card.type === "character").map((card) => card.id), scene_card_ids: cards.filter((card) => card.type === "scene").map((card) => card.id) };
   state.applyingCards = true; state.epoch++; $("confirmApply").disabled = true; render();
@@ -451,7 +459,7 @@ $("confirmApply").addEventListener("click", async () => {
     const updated = await jsonPost(`/photodream/api/projects/${projectId}/frames/apply-cards`, payload);
     updated.forEach((frame) => applyFrame(projectId, frame)); state.epoch++;
     $("applyDialog").close(); message(`参考卡已应用到 ${updated.length} 个镜头，生成时会使用这些设定和参考图。`);
-  } catch (error) { $("applyError").textContent = error.message; $("applyError").hidden = false; }
+  } catch (error) { Studio.showError(error); }
   finally { state.applyingCards = false; $("confirmApply").disabled = false; render(); }
 });
 
@@ -478,7 +486,7 @@ async function switchProject(id) {
     renderProjects(); render(); centerSelected(false);
     if (active) Studio.projectSelected(id);
     message(frames.length ? "工作台已就绪，选择镜头继续创作" : "新增镜头，让故事从第一帧开始");
-  } catch (error) { message(error.message, true); renderProjects(); }
+  } catch (error) { message(error, true); renderProjects(); }
   finally { if (requested === switchProject.version) { state.loadingProject = false; render(); rememberWorkspace(); } }
 }
 switchProject.version = 0;
@@ -490,7 +498,7 @@ $("createProject").addEventListener("click", async () => {
     const form = new FormData(); form.append("name", name);
     const project = await api("/photodream/api/projects", { method: "POST", body: form });
     state.projects.unshift(project); $("projectName").value = ""; await switchProject(project.id);
-  } catch (error) { message(error.message, true); }
+  } catch (error) { message(error, true); }
   finally { $("createProject").disabled = false; }
 });
 async function createBlankFrame() {
@@ -512,7 +520,7 @@ async function createBlankFrame() {
       state.frames.push(frame); selectFrame(frame.id, true);
     }
     message("已创建一个空白分镜，可在右侧填写提示词。");
-  } catch (error) { message(error.message, true); }
+  } catch (error) { message(error, true); }
   finally { state.creatingFrame = false; render(); }
 }
 $("addFrame").addEventListener("click", createBlankFrame);
@@ -540,7 +548,7 @@ async function deleteFrame(frameId) {
       rememberWorkspace();
     }
     message(`已删除「${title}」。${frames.length ? "" : "点击新建分镜可继续添加。"}`);
-  } catch (error) { message(`删除失败：${error.message}`, true); }
+  } catch (error) { message(error, true); }
   finally { state.deletingFrame = ""; render(); }
 }
 $("deleteFrame").addEventListener("click", () => { const frame = currentFrame(); if (frame) deleteFrame(frame.id); });
@@ -611,7 +619,7 @@ async function init() {
     const id = initialProjectId || readLocal("last-project");
     await switchProject(projects.some((p) => p.id === id) ? id : projects[0]?.id || "");
     $("connection").textContent = "已连接";
-  } catch (error) { message(error.message, true); $("connection").textContent = "连接失败"; throw error; }
+  } catch (error) { message(error, true); $("connection").textContent = "连接失败"; throw error; }
 }
 storagePrefix += Studio.user.id + ":";
 const ready = init(), pollTimer = setInterval(poll,2500);
@@ -623,7 +631,7 @@ async function synchronizeProject() {
     state.project.character_cards = project.character_cards; state.project.scene_cards = project.scene_cards;
     state.project.name = project.name;
     renderCards(); renderLibrary();
-  } catch (error) { if (active && state.project?.id === id) message(error.message,true); }
+  } catch (error) { if (active && state.project?.id === id) message(error,true); }
 }
 return {
   ready,

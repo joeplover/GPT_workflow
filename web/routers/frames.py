@@ -9,12 +9,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..config import get_settings, resolve_runtime_settings
+from ..errors import describe_error
 from ..repository import get_project, mutate_project, now_iso
 from ..services.journal import (
     start_generation,
     complete_generation,
     fail_generation,
-    safe_error,
 )
 from ..services.images import (
     build_reference_collage,
@@ -348,12 +348,12 @@ def generate_frame(
         )
     except Exception as exc:
         fail_generation(record_id, exc, settings["api_key"])
-        error = (
-            safe_error(exc, settings["api_key"])
-            if isinstance(exc, HTTPException)
-            else "生成失败，请检查接口配置或稍后重试。"
+        error = describe_error(exc).message
+        logger.warning(
+            "Storyboard generation failed: frame=%s code=%s",
+            frame_id,
+            describe_error(exc).code,
         )
-        logger.exception("Storyboard generation failed for frame %s", frame_id)
 
         def fail(current):
             frame = find_frame(current, frame_id)

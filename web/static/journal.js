@@ -13,7 +13,7 @@ export async function mount(root, Studio, projects) {
   const formatTime = time => time ? new Date(time).toLocaleString("zh-CN") : "—";
   function card(r) {
     const q = r.request;
-    return `<article class="c-panel generation-card"><span class="tag">${statusNames[r.status] || e(r.status)}${r.historical ? " · 历史补录" : ""}${r.image_deleted ? " · 图片已删除" : ""}</span><h3>${e(q.frame_title || "单图生成")}</h3><div class="card-meta">#${r.id} · ${formatTime(r.created_at)}<br>${e(q.model || "未知模型")} · ${e(q.size || "未知尺寸")} · ${e(q.actor_name || "历史操作人未知")}</div><p class="journal-prompt">${e(q.prompt || "历史提示词未记录")}</p>${r.error ? `<p class="form-error">${e(r.error)}</p>` : ""}<div class="card-actions"><button data-generation="${r.id}">查看完整记录</button></div></article>`;
+    return `<article class="c-panel generation-card"><span class="tag">${statusNames[r.status] || e(r.status)}${r.historical ? " · 历史补录" : ""}${r.image_deleted ? " · 图片已删除" : ""}</span><h3>${e(q.frame_title || "单图生成")}</h3><div class="card-meta">#${r.id} · ${formatTime(r.created_at)}<br>${e(q.model || "未知模型")} · ${e(q.size || "未知尺寸")} · ${e(q.actor_name || "历史操作人未知")}</div><p class="journal-prompt">${e(q.prompt || "历史提示词未记录")}</p>${r.error ? `<p class="form-error">${e(Studio.errorSummary(r.error))}</p>` : ""}<div class="card-actions"><button data-generation="${r.id}">查看完整记录</button></div></article>`;
   }
   function renderGroups() {
     const groups = new Map();
@@ -38,7 +38,7 @@ export async function mount(root, Studio, projects) {
       if (current !== version || !root.isConnected || Studio.route() !== "generations") return;
       for (const item of page.items) records.set(item.id, item);
       renderGroups(); cursor = page.next_before; $("journalMore").hidden = !cursor;
-    } catch (error) { if (current === version && $("journalError")) $("journalError").textContent = error.message; }
+    } catch (error) { if (current === version && root.isConnected && $("journalError")) { $("journalError").textContent = "记录加载失败，请重试。"; Studio.showError(error); } }
     finally { if (current === version && $("journalMore")) $("journalMore").disabled = false; }
   }
   function preview(url, r, output = false) {
@@ -66,8 +66,8 @@ export async function mount(root, Studio, projects) {
         ${field("当时的角色卡与场景卡快照", JSON.stringify({character_cards:q.character_cards || [], scene_cards:q.scene_cards || []}, null, 2))}
         ${field("完整记录（可复制保存）", JSON.stringify(r, null, 2))}
         ${refs.length ? `<h3>当时参考图片</h3><div class="journal-references">${refs.map(url => preview(url, r)).join("")}</div>` : ""}
-        ${r.error ? `<p class="form-error">${e(r.error)}</p>` : ""}</div>`;
-    } catch (error) { if (current === detailVersion && $("journalDetailError")) $("journalDetailError").textContent = error.message; }
+        ${r.error ? `<p class="form-error">${e(Studio.errorSummary(r.error))}</p>` : ""}</div>`;
+    } catch (error) { if (current === detailVersion && root.isConnected && $("journalDetailError")) { $("journalDetailError").textContent = "详情加载失败，请重试。"; Studio.showError(error); } }
   }
   $("journalRefresh").onclick = () => load(true); $("journalMore").onclick = () => load();
   for (const id of ["journalProject", "journalStatus", "journalFrame"]) $(id).onchange = () => load(true);
@@ -83,7 +83,7 @@ export async function mount(root, Studio, projects) {
     try {
       const r = records.get(detailId);
       if (await Studio.purgeImage(r.project_id, button.dataset.purgeImage)) await showDetail(r.id);
-    } catch (error) { $("journalDetailError").textContent = error.message; }
+    } catch (error) { Studio.showError(error); }
     finally { button.disabled = false; }
   };
   await load(true);

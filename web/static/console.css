@@ -2,6 +2,14 @@
 * { box-sizing:border-box; }
 [hidden] { display:none !important; }
 .api-profile-settings { max-width:1000px; margin-top:20px; min-width:0; }
+.console-body .system-error-dialog { width:min(480px,calc(100vw - 32px)); max-height:85dvh; overflow:auto; padding:24px; }
+.error-heading { display:flex; align-items:center; gap:12px; }.console-body .error-heading h2 { margin:0; font-size:20px; }
+.error-symbol { display:grid; place-items:center; flex:none; width:32px; height:32px; border:1px solid #8c625d; border-radius:50%; color:#ffb7ad; font-size:20px; }
+.system-error-list { list-style:none; padding:0; margin:20px 0; display:grid; gap:14px; }.system-error-list p { margin:0; overflow-wrap:anywhere; }.system-error-list small { color:var(--c-muted); }
+.error-diagnostics { border-top:1px solid var(--c-line); padding-top:14px; color:var(--c-muted); font-size:12px; }.error-diagnostics summary { cursor:pointer; }.error-diagnostics pre { max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; }.error-diagnostics button { font-size:12px; padding:6px 10px; }.error-diagnostics [role="status"] { margin-left:8px; }
+.error-actions { display:flex; justify-content:flex-end; margin-top:22px; }
+.exception-message { min-width:220px; max-width:420px; overflow-wrap:anywhere; }.exception-reference { font-family:monospace; font-size:12px; overflow-wrap:anywhere; user-select:all; }
+#exceptionDetails { width:min(760px,calc(100vw - 32px)); max-height:85dvh; overflow:auto; }#exceptionDetails pre { max-height:40vh; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:var(--c-bg); padding:16px; font-size:12px; }
 .api-profile-settings .page-head { margin-bottom:12px; }
 .api-profile-settings .page-head h2 { margin-bottom:8px; }
 .api-profile-settings .c-form { max-width:620px; margin:20px 0 28px; }

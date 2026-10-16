@@ -125,16 +125,11 @@ def _extract_relay_error_text(response: requests.Response) -> str:
 
 
 def _raise_relay_http_error(response: requests.Response, operation: str) -> None:
+    from ..errors import UpstreamError
+
     status = response.status_code
     upstream_message = _extract_relay_error_text(response)
-    detail = (
-        f"Relay {operation} API failed. "
-        f"upstream_status={status}, upstream_message={upstream_message}"
-    )
-    # Upstream 4xx are request/auth/quota issues and should not be surfaced as 502.
-    if 400 <= status < 500:
-        raise HTTPException(status_code=400, detail=detail)
-    raise HTTPException(status_code=502, detail=detail)
+    raise UpstreamError(status, f"{operation}: {upstream_message}")
 
 
 def persist_result(
@@ -143,7 +138,7 @@ def persist_result(
     data = result.get("data") or []
     if not data:
         raise HTTPException(
-            status_code=502, detail=f"Relay API returned no image data: {result}"
+            status_code=502, detail="生图接口未返回图片，请稍后重试。"
         )
 
     item = data[0]
@@ -160,7 +155,7 @@ def persist_result(
         output_path.write_bytes(image_response.content)
     else:
         raise HTTPException(
-            status_code=502, detail=f"Unsupported relay response payload: {result}"
+            status_code=502, detail="生图接口返回格式不受支持，请检查接口配置。"
         )
 
     return f"/outputs/{filename}"

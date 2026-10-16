@@ -17,7 +17,7 @@ export function mountSelector(root, Studio, signal) {
       info.textContent = selected ? selected.base_url : config?.has_api_key ? `服务端默认 · ${config.base_url}` : "请先在设置中添加 URL + Key 配置";
       loaded = true;
     } catch (error) {
-      loaded = false; info.textContent = `接口配置加载失败：${error.message}`;
+      loaded = false; info.textContent = "接口配置加载失败，请重试。";
       throw error;
     }
   }
@@ -26,13 +26,13 @@ export function mountSelector(root, Studio, signal) {
     try {
       await Studio.post(endpoint + "/selection", {profile_id:select.value});
       await refresh(); changed();
-    } catch (error) { info.textContent = error.message; loaded = false; }
+    } catch (error) { Studio.showError(error); info.textContent = "接口选择未保存，请重试。"; loaded = false; }
     finally { saving = false; select.disabled = false; }
   }, {signal});
   root.getElementById("manageApiProfiles").addEventListener("click", event => {
     event.preventDefault(); Studio.navigate("/photodream/#account");
   }, {signal});
-  window.addEventListener(changedEvent, () => refresh().catch(() => {}), {signal});
+  window.addEventListener(changedEvent, () => refresh().catch(error => Studio.showError(error)), {signal});
   return {
     refresh,
     selection() {
@@ -83,7 +83,7 @@ export async function mountSettings(root, Studio) {
     try {
       await Studio.post(endpoint + (editing ? `/${editing}` : ""), Object.fromEntries(new FormData(form)));
       closeEditor(); await load(); changed(); notice("接口配置已保存。");
-    } catch (error) { notice(error.message); }
+    } catch (error) { Studio.showError(error); }
     finally { button.disabled = false; }
   };
   $("apiProfileList").onclick = async event => {
@@ -96,8 +96,8 @@ export async function mountSettings(root, Studio) {
       if (action === "delete") { await Studio.api(`${endpoint}/${id}`, {method:"DELETE"}); if (editing === id) closeEditor(); }
       else await Studio.post(endpoint + "/selection", {profile_id:id});
       await load(); changed(); notice(action === "delete" ? "接口配置已删除。" : "接口选择已保存，两个工作台均可使用。");
-    } catch (error) { notice(error.message); }
+    } catch (error) { Studio.showError(error); }
     finally { button.disabled = false; }
   };
-  try { await load(); } catch (error) { notice(error.message); $("apiProfileList").textContent = "接口配置加载失败，请重新打开设置。"; }
+  try { await load(); } catch (error) { Studio.showError(error); $("apiProfileList").textContent = "接口配置加载失败，请重新打开设置。"; }
 }

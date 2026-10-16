@@ -37,9 +37,7 @@ window.Studio = (() => {
     return result;
   }
   async function api(url, options = {}) {
-    const response = await fetch(url, options), body = await response.json();
-    if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "提交内容不正确，请检查填写项。");
-    return body;
+    return StudioErrors.request(url, options);
   }
   function cached(url, ttl = 3000) {
     const entry = cache.get(url);
@@ -87,20 +85,22 @@ window.Studio = (() => {
     user = me; document.documentElement.dataset.userId = me.id;
     const bar = document.createElement("nav"); bar.className = "studio-nav"; bar.setAttribute("aria-label","系统导航");
     bar.innerHTML = `<a class="studio-logo" href="/photodream/">▥ <strong>Photo Dream</strong><span>创作中台</span></a><div class="studio-links"><a href="/photodream/#overview">总览</a><a href="/photodream/#projects">项目管理</a><a href="/photodream/single">单图工作台</a><a href="/photodream/storyboard">分镜工作台</a><a href="/photodream/#resources">资源中心</a><a href="/photodream/#teams">团队</a></div><div class="studio-account"><a href="/photodream/#account">${escape(me.display_name)}</a><button id="studioLogout" type="button">退出</button></div>`;
-    if (me.is_admin) { const a = document.createElement("a"); a.href="/photodream/#users"; a.textContent="用户管理"; bar.querySelector(".studio-links").append(a); }
+    if (me.is_admin) { for (const [name, label] of [["users", "用户管理"], ["exceptions", "异常管理"]]) { const a = document.createElement("a"); a.href=`/photodream/#${name}`; a.textContent=label; bar.querySelector(".studio-links").append(a); } }
     document.body.prepend(bar);
     new ResizeObserver(() => document.documentElement.style.setProperty("--studio-nav-height",`${bar.offsetHeight}px`)).observe(bar);
     bar.querySelector("#studioLogout").addEventListener("click",async () => {
       if (!confirm("确认退出登录？请先确认当前草稿已同步。")) return;
-      await post("/photodream/api/auth/logout",{}); location.assign("/photodream/login");
+      try { await post("/photodream/api/auth/logout",{}); location.assign("/photodream/login"); }
+      catch (error) { StudioErrors.show(error); }
     });
     return me;
   }).catch(error => {
-    if (error.message === "请先登录。") location.replace("/photodream/login?next=" + encodeURIComponent(location.pathname + location.search + location.hash));
+    if (error.status === 401) location.replace("/photodream/login?next=" + encodeURIComponent(location.pathname + location.search + location.hash));
     const view = document.getElementById("consoleView"); if (view) view.textContent = "工作空间加载失败，请刷新重试。";
     throw error;
   });
   return {ready,api,post,cached,escape,asset,downloadUrl,cardActions,removeCard,purgeImage,route,navigate,projectSelected,highlight,
+    showError:StudioErrors.show, errorSummary:StudioErrors.summary, readResponse:StudioErrors.readResponse,
     onRoute(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     get projectId() { return currentProject; }, get user() { return user; }};
 })();

@@ -16,7 +16,7 @@
     const root = $("journalRoot"), module = await import("/photodream/static/journal.js");
     if (root.isConnected && view() === "generations") await module.mount(root, Studio, projects);
   }
-  function notify(message, error = false) { $("notice").hidden = false; $("notice").className = "notice" + (error ? " error" : ""); $("notice").textContent = message; }
+  function notify(message, error = false) { if (error) { Studio.showError(message); return; } $("notice").hidden = false; $("notice").className = "notice"; $("notice").textContent = message; }
   async function refresh() { [projects, teams, resources] = await Promise.all([Studio.cached("/photodream/api/projects"), Studio.api("/photodream/api/teams"), Studio.cached("/photodream/api/resources")]); initialized = true; }
   function heading(title, description, action = "") { return `<header class="page-head"><div><div class="eyebrow">Photo Dream / ${e(view().toUpperCase())}</div><h1>${title}</h1><p>${description}</p></div>${action}</header>`; }
   function teamOptions(includePrivate = true) { return (includePrivate ? '<option value="">个人空间 · 仅自己可见</option>' : "") + teams.map(t => `<option value="${e(t.id)}">${e(t.name)}</option>`).join(""); }
@@ -27,7 +27,7 @@
   $("dialogForm").onsubmit = async event => {
     event.preventDefault(); $("dialogSubmit").disabled = true;
     try { await modalAction(Object.fromEntries(new FormData(event.currentTarget))); $("consoleDialog").close(); await refresh(); await render(); }
-    catch (error) { $("dialogError").textContent = error.message; }
+    catch (error) { Studio.showError(error); }
     finally { $("dialogSubmit").disabled = false; }
   };
   function projectCard(p) {
@@ -85,8 +85,8 @@
   }
   async function accountPage() {
     $("consoleView").innerHTML = heading("账号设置", "管理显示名称与登录密码。修改密码后，所有已登录会话会退出。") + `<div class="account-grid"><section class="c-panel"><h2>个人资料</h2><form id="profileForm" class="c-form"><label>用户名<input value="${e(Studio.user.username)}" disabled></label><label>显示名称<input name="display_name" required maxlength="100" value="${e(Studio.user.display_name)}"></label><button class="primary">保存资料</button></form></section><section class="c-panel"><h2>修改密码</h2><form id="passwordForm" class="c-form"><label>当前密码<input type="password" name="current_password" autocomplete="current-password" required maxlength="128"></label><label>新密码<input type="password" name="new_password" autocomplete="new-password" required minlength="10" maxlength="128"></label><label>确认新密码<input type="password" name="confirm_password" autocomplete="new-password" required minlength="10" maxlength="128"></label><button class="primary">更新密码并退出</button></form></section></div>`;
-    $("profileForm").onsubmit = async event => { event.preventDefault(); try { Object.assign(Studio.user, await Studio.post("/photodream/api/auth/profile", Object.fromEntries(new FormData(event.currentTarget)))); document.querySelector(".studio-account a").textContent = Studio.user.display_name; notify("资料已保存。"); } catch (error) { notify(error.message,true); } };
-    $("passwordForm").onsubmit = async event => { event.preventDefault(); try { const data = Object.fromEntries(new FormData(event.currentTarget)); if (data.new_password !== data.confirm_password) throw new Error("两次新密码不一致。"); delete data.confirm_password; await Studio.post("/photodream/api/auth/password",data); location.assign("/photodream/login"); } catch (error) { notify(error.message,true); } };
+    $("profileForm").onsubmit = async event => { event.preventDefault(); try { Object.assign(Studio.user, await Studio.post("/photodream/api/auth/profile", Object.fromEntries(new FormData(event.currentTarget)))); document.querySelector(".studio-account a").textContent = Studio.user.display_name; notify("资料已保存。"); } catch (error) { notify(error,true); } };
+    $("passwordForm").onsubmit = async event => { event.preventDefault(); try { const data = Object.fromEntries(new FormData(event.currentTarget)); if (data.new_password !== data.confirm_password) throw new Error("两次新密码不一致。"); delete data.confirm_password; await Studio.post("/photodream/api/auth/password",data); location.assign("/photodream/login"); } catch (error) { notify(error,true); } };
     const section = document.createElement("section"); section.className = "c-panel api-profile-settings"; section.id = "apiProfilesSection";
     $("consoleView").append(section);
     const module = await import("/photodream/static/api-profiles.js");
@@ -96,6 +96,12 @@
     if (!Studio.user.is_admin) { location.hash = "overview"; return; }
     const users = await Studio.api("/photodream/api/admin/users");
     $("consoleView").innerHTML = heading("用户管理", "维护账号与登录权限。系统管理员不会自动获得他人的私人项目权限。", '<button class="primary" data-action="new-user">＋ 创建用户</button>') + `<section class="c-panel table-wrap"><table class="c-table"><thead><tr><th>用户名</th><th>显示名称</th><th>权限</th><th>状态</th><th>注册时间</th><th>操作</th></tr></thead><tbody>${users.map(u => `<tr><td>${e(u.username)}</td><td>${e(u.display_name)}</td><td>${u.is_admin ? "系统管理员" : "普通用户"}</td><td>${u.is_active ? "正常" : "已停用"}</td><td>${date(u.created_at)}</td><td>${u.id !== Studio.user.id ? `<button data-action="user-status" data-id="${e(u.id)}" data-active="${!u.is_active}">${u.is_active ? "停用" : "启用"}</button> <button data-action="reset-password" data-id="${e(u.id)}">重置密码</button>` : "当前账号"}</td></tr>`).join("")}</tbody></table></section>`;
+  }
+  async function exceptionsPage() {
+    if (!Studio.user.is_admin) { Studio.navigate("/photodream/"); return; }
+    $("consoleView").innerHTML = heading("异常管理", "查询错误原因和脱敏诊断详情，处理后标记状态。") + '<div id="exceptionRoot"></div>';
+    const root = $("exceptionRoot"), module = await import("/photodream/static/exceptions.js");
+    if (root.isConnected && view() === "exceptions") await module.mount(root, Studio);
   }
   async function render() {
     const version = ++renderVersion, name = view(), isWorkbench = ["single","storyboard"].includes(name);
@@ -110,7 +116,7 @@
     $("workspaceMain").classList.toggle("workbench-main",isWorkbench);
     $("workbenchLoading").hidden = !isWorkbench; $("workbenchRetry").hidden = true;
     $("workbenchLoading").querySelector("span:last-of-type").textContent = "正在准备工作台…";
-    document.title = `${({single:"单图工作台",storyboard:"分镜工作台",projects:"项目管理",resources:"资源中心",generations:"生成日志",teams:"团队空间",account:"账号设置",users:"用户管理"})[name] || "创作中台"} · Photo Dream`;
+    document.title = `${({single:"单图工作台",storyboard:"分镜工作台",projects:"项目管理",resources:"资源中心",generations:"生成日志",teams:"团队空间",account:"账号设置",users:"用户管理",exceptions:"异常管理"})[name] || "创作中台"} · Photo Dream`;
     if (isWorkbench) {
       const projectId = new URL(location.href).searchParams.get("project") || Studio.projectId;
       try {
@@ -123,14 +129,15 @@
         $("workspaceMain").scrollTop = record.scroll;
       } catch (error) {
         if (version !== renderVersion) return;
-        $("workbenchLoading").querySelector("span:last-of-type").textContent = error.message;
+        Studio.showError(error);
+        $("workbenchLoading").querySelector("span:last-of-type").textContent = "工作台加载失败，请重试。";
         $("workbenchRetry").hidden = false;
       }
       return;
     }
     if (!initialized || wasWorkbench) await refresh();
     if (version !== renderVersion) return;
-    await ({overview,projects:projectsPage,resources:resourcesPage,generations:generationsPage,teams:teamsPage,account:accountPage,users:usersPage}[name] || overview)();
+    await ({overview,projects:projectsPage,resources:resourcesPage,generations:generationsPage,teams:teamsPage,account:accountPage,users:usersPage,exceptions:exceptionsPage}[name] || overview)();
     if (version === renderVersion) $("workspaceMain").scrollTop = scrollPositions.get(name) || 0;
   }
   function newProject(team = "") {
@@ -147,7 +154,7 @@
         const projectId = cardButton.closest("[data-resource-project]").dataset.resourceProject;
         const changed = await Studio.removeCard(projectId, cardButton.dataset.cardKind, cardButton.dataset.cardId, cardButton.dataset.cardAction === "image");
         if (changed) { await refresh(); await render(); notify("参考卡已更新，历史图片和日志已保留。"); }
-      } catch (error) { notify(error.message, true); }
+      } catch (error) { notify(error, true); }
       finally { cardButton.disabled = false; }
       return;
     }
@@ -178,13 +185,13 @@
       else if (action === "remove-member") { if (!confirm(id === Studio.user.id ? "退出团队后将无法访问团队项目，确认退出？" : "移除此成员？他将失去团队项目和资源的访问权限。")) return; await Studio.api(`/photodream/api/teams/${team}/members/${id}`,{method:"DELETE"}); await refresh(); await render(); }
       else if (action === "role") { await Studio.post(`/photodream/api/teams/${team}/members/${id}/role`,{role}); await render(); }
       else if (action === "import") { const card = resources.find(c => c.id === id && c.project_id === sourceId), targets = projects.filter(p => !p.archived && p.id !== sourceId); if (!targets.length) throw new Error("请先创建一个目标项目。"); modal("导入资源副本", `<p class="muted">将「${e(card.name)}」复制到目标项目。之后修改副本不会影响来源卡片。</p><label>目标项目<select name="target">${targets.map(p => `<option value="${e(p.id)}">${e(p.name)} · ${p.team_id ? e(teamName(p.team_id)) : "个人"}</option>`).join("")}</select></label>`,data => Studio.post(`/photodream/api/projects/${data.target}/resources/import`,{source_project_id:sourceId, card_type:card.card_type,card_ids:[id]}),"导入资源"); }
-    } catch (error) { notify(error.message,true); }
+    } catch (error) { notify(error,true); }
   });
-  $("workbenchRetry").onclick = () => render();
-  Studio.onRoute(() => Studio.ready.then(render).catch(error => notify(error.message,true)));
+  $("workbenchRetry").onclick = () => render().catch(error => notify(error,true));
+  Studio.onRoute(() => Studio.ready.then(render).catch(error => notify(error,true)));
   Studio.ready.then(async () => {
-    $("adminMenu").hidden = !Studio.user.is_admin; await render();
+    $("adminMenu").hidden = !Studio.user.is_admin; $("exceptionMenu").hidden = !Studio.user.is_admin; await render();
     const preload = () => workbenches.then(module => module.preload());
     if ("requestIdleCallback" in window) requestIdleCallback(preload,{timeout:2000}); else setTimeout(preload,500);
-  }).catch(error => notify(error.message,true));
+  }).catch(error => notify(error,true));
 })();

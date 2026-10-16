@@ -36,6 +36,27 @@ class Migration(Base):
     )
 
 
+class ExceptionRecord(Base):
+    """Redacted request diagnostics, accessible only to system administrators."""
+
+    __tablename__ = "exception_records"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    actor_id: Mapped[str | None] = mapped_column(String, index=True)
+    code: Mapped[str] = mapped_column(String, index=True)
+    message: Mapped[str] = mapped_column(String)
+    status_code: Mapped[int] = mapped_column()
+    method: Mapped[str] = mapped_column(String)
+    path: Mapped[str] = mapped_column(String)
+    exception_type: Mapped[str] = mapped_column(String)
+    diagnostic: Mapped[str] = mapped_column(String)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    resolved_by: Mapped[str | None] = mapped_column(String)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
 class ProjectEvent(Base):
     __tablename__ = "project_events"
 

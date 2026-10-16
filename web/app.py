@@ -2,18 +2,21 @@
 
 from contextlib import asynccontextmanager
 import os
+import uuid
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from starlette._utils import get_route_path
 
 from .config import APP_PREFIX, OUTPUT_DIR, RUNTIME_DIR, STATIC_DIR, UPLOAD_DIR
 from .database import dispose_database, initialize_database
+from .errors import error_context, error_response, install_exception_handlers
 from .routers import (
     api_profiles,
+    exceptions,
     assets,
     auth,
     frames,
@@ -45,6 +48,7 @@ def create_app() -> FastAPI:
         title="Photo Dream Image Studio",
         description="FastAPI / PostgreSQL storyboard image platform",
     )
+    install_exception_handlers(application)
 
     @application.middleware("http")
     async def authenticate(request: Request, call_next):
@@ -63,13 +67,15 @@ def create_app() -> FastAPI:
             if (origin and origin != expected) or request.headers.get(
                 "sec-fetch-site"
             ) == "cross-site":
-                return JSONResponse({"detail": "不允许跨站请求。"}, status_code=403)
+                return await error_response(
+                    request, HTTPException(403, "不允许跨站请求。")
+                )
         actor = await run_in_threadpool(
             session_actor, request.cookies.get(COOKIE_NAME, "")
         )
         if not actor and not public:
             if path.startswith(("/api/", "/uploads/", "/outputs/")):
-                return JSONResponse({"detail": "请先登录。"}, status_code=401)
+                return await error_response(request, HTTPException(401, "请先登录。"))
             from urllib.parse import quote
 
             return RedirectResponse(
@@ -82,6 +88,7 @@ def create_app() -> FastAPI:
                 ),
                 status_code=303,
             )
+        request.state.actor_id = actor.id if actor else None
         token = current_actor.set(actor)
         try:
             return await call_next(request)
@@ -107,6 +114,7 @@ def create_app() -> FastAPI:
     application.include_router(frames.router)
     application.include_router(auth.router)
     application.include_router(api_profiles.router)
+    application.include_router(exceptions.router)
     application.include_router(management.router)
     application.include_router(journal.router)
     application.include_router(assets.router)
@@ -152,6 +160,29 @@ def create_app() -> FastAPI:
         return FileResponse(STATIC_DIR / "console.html")
 
     root = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    install_exception_handlers(root)
+
+    @application.middleware("http")
+    async def catch_application_errors(request: Request, call_next):
+        # Catch before the mounted app's ServerErrorMiddleware starts a response.
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            return await error_response(request, exc)
+
+    @root.middleware("http")
+    async def manage_exceptions(request: Request, call_next):
+        request.state.request_id = uuid.uuid4().hex
+        token = error_context.set({"secrets": set()})
+        try:
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                response = await error_response(request, exc)
+            response.headers["X-Request-ID"] = request.state.request_id
+            return response
+        finally:
+            error_context.reset(token)
 
     @root.get("/", include_in_schema=False)
     def redirect_to_studio():

@@ -1,20 +1,20 @@
 """Generation and editing endpoints; blocking work uses FastAPI's thread pool."""
 
 import uuid
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import requests
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..config import resolve_runtime_settings
+from ..errors import describe_error
 from ..repository import ensure_project
 from ..services.journal import (
     start_generation,
     complete_generation,
     fail_generation,
     update_source,
-    safe_error,
 )
 from ..services.images import (
     build_reference_collage,
@@ -202,32 +202,15 @@ def generate_image(
             )
             source_image = None
             mode = "generate"
-    except requests.exceptions.SSLError as exc:
-        fail_generation(record_id, exc, settings["api_key"])
-        raise HTTPException(
-            status_code=502,
-            detail=f"SSL error while calling relay API: {safe_error(exc, settings['api_key'])}",
-        ) from exc
-    except requests.RequestException as exc:
-        fail_generation(record_id, exc, settings["api_key"])
-        raise HTTPException(
-            status_code=502,
-            detail=f"Relay API request failed: {safe_error(exc, settings['api_key'])}",
-        ) from exc
-    except HTTPException as exc:
-        fail_generation(record_id, exc, settings["api_key"])
-        print(
-            f"[ERROR][{request_id}] HTTPException status={exc.status_code} detail={safe_error(exc, settings['api_key'])}"
-        )
-        raise HTTPException(
-            exc.status_code, safe_error(exc, settings["api_key"])
-        ) from exc
     except Exception as exc:
         fail_generation(record_id, exc, settings["api_key"])
-        print(
-            f"[ERROR][{request_id}] Unexpected error: {safe_error(exc, settings['api_key'])}"
+        info = describe_error(exc)
+        logging.getLogger(__name__).warning(
+            "Image generation failed: record=%s code=%s", record_id, info.code
         )
-        raise HTTPException(502, safe_error(exc, settings["api_key"])) from exc
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(502, info.message) from exc
 
     complete_generation(record_id, result["image_url"])
     print(
@@ -386,22 +369,15 @@ def edit_image(
             use_env_proxy=settings["use_env_proxy"],
             request_timeout=settings["request_timeout"],
         )
-    except requests.exceptions.SSLError as exc:
-        fail_generation(record_id, exc, settings["api_key"])
-        raise HTTPException(
-            status_code=502,
-            detail=f"SSL error while calling relay edit API: {safe_error(exc, settings['api_key'])}",
-        ) from exc
-    except requests.RequestException as exc:
-        fail_generation(record_id, exc, settings["api_key"])
-        raise HTTPException(
-            status_code=502,
-            detail=f"Relay edit API request failed: {safe_error(exc, settings['api_key'])}",
-        ) from exc
     except Exception as exc:
         fail_generation(record_id, exc, settings["api_key"])
-        status = exc.status_code if isinstance(exc, HTTPException) else 502
-        raise HTTPException(status, safe_error(exc, settings["api_key"])) from exc
+        info = describe_error(exc)
+        logging.getLogger(__name__).warning(
+            "Image edit failed: record=%s code=%s", record_id, info.code
+        )
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(502, info.message) from exc
 
     complete_generation(record_id, result["image_url"])
     return add_shot_to_project(

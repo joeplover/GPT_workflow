@@ -49,11 +49,23 @@ const els = {
 function setStatus(text) {
   els.submitStatus.textContent = text;
 }
+function fail(error, context = "") {
+  Studio.showError(error, {context});
+  setStatus("操作未完成，请查看弹窗提示。");
+}
 
 let singleDraftPrefix = "workflow.single.v2:";
 const singleDrafts = new Map(), singleSaves = new Map(), singleTimers = new Map();
+const syncFailures = new Set();
+let localStorageFailed = false;
 function readSingleDraft(key) { try { return JSON.parse(localStorage.getItem(singleDraftPrefix + key) || "null"); } catch { return null; } }
-function writeSingleDraft(key, draft) { try { localStorage.setItem(singleDraftPrefix + key, JSON.stringify(draft)); } catch { setStatus("无法保存本地草稿，请等待数据库同步后再关闭页面。"); } }
+function writeSingleDraft(key, draft) {
+  try { localStorage.setItem(singleDraftPrefix + key, JSON.stringify(draft)); localStorageFailed = false; }
+  catch {
+    setStatus("无法保存本地草稿，请等待数据库同步后再关闭页面。");
+    if (!localStorageFailed) { localStorageFailed = true; Studio.showError("浏览器无法保存本地草稿，请等待数据库显示已保存后再关闭页面。"); }
+  }
+}
 function captureSingleDraft() {
   return { prompt: els.prompt.value, system_prompt: els.systemPrompt.value, model: els.model.value, size: els.size.value,
     project_name: els.projectName.value, character_card_ids: selectedCardIds("character"), scene_card_ids: selectedCardIds("scene"),
@@ -93,10 +105,9 @@ function saveSingleDraft(id) {
   const next = prior.catch(() => {}).then(async () => {
     const draft = singleDrafts.get(id); if (!draft) return;
     const body = JSON.stringify({ single_image_draft: draft });
-    const response = await fetch(`/photodream/api/projects/${id}/workspace`, { method: "POST", headers: { "Content-Type": "application/json" },
+    const workspace = await Studio.api(`/photodream/api/projects/${id}/workspace`, { method: "POST", headers: { "Content-Type": "application/json" },
       body, signal: AbortSignal.timeout(15000), keepalive: new Blob([body]).size < 60000 });
-    if (!response.ok) throw new Error("草稿同步失败");
-    const workspace = await response.json();
+    syncFailures.delete(id);
     const project = state.projects.find((p) => p.id === id); if (project) project.workspace = workspace;
     if (singleDrafts.get(id) === draft) {
       singleDrafts.delete(id); try { localStorage.removeItem(singleDraftPrefix + id); } catch { /* Saved to database. */ }
@@ -104,10 +115,11 @@ function saveSingleDraft(id) {
     }
   });
   singleSaves.set(id, next);
-  next.then(() => { if (singleSaves.get(id) === next) singleSaves.delete(id); }, () => {
+  next.then(() => { if (singleSaves.get(id) === next) singleSaves.delete(id); }, (error) => {
     if (singleSaves.get(id) === next) singleSaves.delete(id);
     if (singleDrafts.has(id)) singleTimers.set(id, setTimeout(() => saveSingleDraft(id).catch(() => {}), 3000));
     if (state.currentProjectId === id) setStatus("草稿暂未同步，已保留本地副本并自动重试");
+    if (!syncFailures.has(id)) { syncFailures.add(id); Studio.showError(error, {context:"草稿同步失败，已保留本地副本并自动重试"}); }
   });
   return next;
 }
@@ -242,7 +254,7 @@ function refillFromShot(shot) {
 async function downloadShot(shot) {
   try {
     const resp = await fetch(Studio.asset(shot.image_url));
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) await Studio.readResponse(resp);
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -254,7 +266,7 @@ async function downloadShot(shot) {
     URL.revokeObjectURL(url);
     setStatus(`第 ${shot.shot_number} 镜下载完成`);
   } catch (err) {
-    setStatus(`下载失败：${err.message}`);
+    fail(err, "下载图片");
   }
 }
 
@@ -304,13 +316,13 @@ function renderHistory(project) {
         return;
       }
       if (button.dataset.action === "remove") {
-        removeHistoryShot(targetShot).catch(error => setStatus(error.message));
+        removeHistoryShot(targetShot).catch(error => fail(error));
         return;
       }
 
       refillFromShot(targetShot);
       if (button.dataset.action === "retry") {
-        submitForm(new Event("submit")).catch((error) => setStatus(`失败：${error.message}`));
+        submitForm(new Event("submit")).catch((error) => fail(error));
       }
     });
   });
@@ -463,11 +475,7 @@ async function ensureActiveProject() {
   const formData = new FormData();
   formData.append("name", name);
 
-  const response = await fetch("/photodream/api/projects", { method: "POST", body: formData });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.detail || "创建项目失败");
-  }
+  const data = await Studio.api("/photodream/api/projects", { method: "POST", body: formData });
 
   state.currentProjectId = data.id;
   rememberSingleDraft();
@@ -482,7 +490,7 @@ async function createCard(type) {
   try {
     project = await ensureActiveProject();
   } catch (e) {
-    setStatus(`失败：${e.message}（请先在下拉框选择项目，或填写新项目名称后重试）`);
+    fail(e, "创建参考卡");
     return;
   }
 
@@ -493,7 +501,7 @@ async function createCard(type) {
     const missing = [];
     if (!name) missing.push("名称");
     if (!content) missing.push("设定内容");
-    setStatus(`请填写${type === "character" ? "角色" : "场景"}卡的：${missing.join("、")}`);
+    fail(`请填写${type === "character" ? "角色" : "场景"}卡的：${missing.join("、")}`);
     return;
   }
 
@@ -507,11 +515,7 @@ async function createCard(type) {
     formData.append("image", imageInput.files[0]);
   }
 
-  const response = await fetch(`/photodream/api/projects/${project.id}/cards`, { method: "POST", body: formData });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.detail || "创建卡片失败");
-  }
+  const data = await Studio.api(`/photodream/api/projects/${project.id}/cards`, { method: "POST", body: formData });
 
   if (type === "character") {
     els.characterName.value = "";
@@ -559,11 +563,7 @@ async function submitForm(event) {
     const refFiles = Array.from(els.referenceImages.files || []);
     refFiles.forEach((file) => formData.append("reference_images", file));
 
-    const response = await fetch("/photodream/api/generate", { method: "POST", body: formData });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.detail || "请求失败");
-    }
+    const data = await Studio.api("/photodream/api/generate", { method: "POST", body: formData });
 
     state.currentProjectId = data.project.id;
     els.projectName.value = data.project.name;
@@ -571,18 +571,18 @@ async function submitForm(event) {
     await loadProjects();
     setStatus("生图完成");
   } catch (error) {
-    setStatus(`失败：${error.message}`);
+    fail(error);
   } finally {
     els.submitBtn.disabled = false;
   }
 }
 
 els.addCharacterCardBtn.addEventListener("click", () => {
-  createCard("character").catch((error) => setStatus(`失败：${error.message}`));
+  createCard("character").catch((error) => fail(error));
 });
 
 els.addSceneCardBtn.addEventListener("click", () => {
-  createCard("scene").catch((error) => setStatus(`失败：${error.message}`));
+  createCard("scene").catch((error) => fail(error));
 });
 
 els.projectSelect.addEventListener("change", (event) => {
@@ -628,7 +628,7 @@ els.referenceImages.addEventListener("change", updateReferencePreview);
 
 els.submitBtn.addEventListener("click", (event) => {
   event.preventDefault();
-  submitForm(event).catch((error) => setStatus(`失败：${error.message}`));
+  submitForm(event).catch((error) => fail(error));
 });
 
 root.addEventListener("change", (event) => {
@@ -655,11 +655,11 @@ for (const container of [els.characterCardList, els.sceneCardList]) container.ad
     const index = state.projects.findIndex(p => p.id === id); state.projects[index] = project;
     renderProjectDetails(); applySelectionSnapshot(selection); updateReferencePreview(); rememberSingleDraft();
     setStatus("参考卡已更新，历史图片和日志已保留。");
-  } catch (error) { setStatus(error.message); }
+  } catch (error) { fail(error); }
   finally { button.disabled = false; }
 });
 singleDraftPrefix += Studio.user.id + ":";
-const ready = Promise.all([loadConfig(),loadProjects()]).then(restoreSingleDraft).catch(error => { setStatus(`读取失败：${error.message}`); throw error; });
+const ready = Promise.all([loadConfig(),loadProjects()]).then(restoreSingleDraft).catch(error => { fail(error, "加载工作台"); throw error; });
 async function synchronizeProject() {
   const id = state.currentProjectId; if (!id) return;
   try {
@@ -675,7 +675,7 @@ async function synchronizeProject() {
       els.resultImage.removeAttribute("src");
       els.resultCard.classList.add("is-hidden"); els.resultEmpty.classList.remove("is-hidden");
     }
-  } catch (error) { if (active && state.currentProjectId === id) setStatus(error.message); }
+  } catch (error) { if (active && state.currentProjectId === id) fail(error); }
 }
 return {
   ready,

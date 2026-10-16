@@ -119,12 +119,15 @@ def get_settings() -> dict[str, Any]:
 def resolve_runtime_settings(
     api_key: str | None, base_url: str | None, api_profile_id: str = ""
 ) -> dict[str, Any]:
+    from .errors import protect_secret
+
     settings = get_settings()
     if api_profile_id:
         from .services.api_profiles import profile_credentials
 
         # A named profile is an indivisible pair; ignore legacy URL/Key overrides.
         key, url = profile_credentials(api_profile_id)
+        protect_secret(key)
         return {**settings, "api_key": key, "base_url": url}
     requested_url = (base_url or "").strip().rstrip("/") or settings["base_url"].rstrip(
         "/"
@@ -138,6 +141,7 @@ def resolve_runtime_settings(
             400,
             "使用服务端 Key 时只能使用服务端配置的接口地址；自定义接口请填写自己的 API Key。",
         )
+    protect_secret((api_key or "").strip() or settings["api_key"])
     return {
         **settings,
         "api_key": (api_key or "").strip() or settings["api_key"],
