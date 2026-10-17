@@ -28,6 +28,83 @@ window.PhotoDreamAgent = (() => {
     root.querySelectorAll("[data-xiaomeng-illustration]").forEach(mountCharacterScene);
   }
 
+  function makeLauncherDraggable(launcher) {
+    const storageKey = "photodream.xiaomeng.launcher.position";
+    let dragging = false;
+    let moved = false;
+    let pointerId = null;
+    let offsetX = 0;
+    let offsetY = 0;
+    let startX = 0;
+    let startY = 0;
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), Math.max(min, max));
+    }
+    function place(left, top, save = true) {
+      const maxLeft = window.innerWidth - launcher.offsetWidth - 8;
+      const maxTop = window.innerHeight - launcher.offsetHeight - 8;
+      const nextLeft = clamp(left, 8, maxLeft);
+      const nextTop = clamp(top, 8, maxTop);
+      launcher.style.left = `${nextLeft}px`;
+      launcher.style.top = `${nextTop}px`;
+      launcher.style.right = "auto";
+      launcher.style.bottom = "auto";
+      if (save) {
+        try { localStorage.setItem(storageKey, JSON.stringify({left: nextLeft, top: nextTop})); } catch (_) { /* private mode */ }
+      }
+    }
+    function restore() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+        if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+          place(saved.left, saved.top, false);
+        }
+      } catch (_) { /* ignore malformed local state */ }
+    }
+    launcher.addEventListener("pointerdown", event => {
+      if (event.button !== undefined && event.button !== 0) return;
+      const rect = launcher.getBoundingClientRect();
+      dragging = true;
+      moved = false;
+      pointerId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+      offsetX = event.clientX - rect.left;
+      offsetY = event.clientY - rect.top;
+      launcher.setPointerCapture?.(pointerId);
+      launcher.classList.add("is-dragging");
+      event.preventDefault();
+    });
+    launcher.addEventListener("pointermove", event => {
+      if (!dragging || event.pointerId !== pointerId) return;
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 5) moved = true;
+      if (moved) place(event.clientX - offsetX, event.clientY - offsetY);
+      event.preventDefault();
+    });
+    function finish(event) {
+      if (!dragging || (event.pointerId !== undefined && event.pointerId !== pointerId)) return;
+      dragging = false;
+      launcher.classList.remove("is-dragging");
+      launcher.releasePointerCapture?.(pointerId);
+      pointerId = null;
+    }
+    launcher.addEventListener("pointerup", finish);
+    launcher.addEventListener("pointercancel", finish);
+    launcher.addEventListener("click", event => {
+      if (moved) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        moved = false;
+      }
+    }, true);
+    window.addEventListener("resize", () => {
+      const rect = launcher.getBoundingClientRect();
+      if (rect.left || rect.top) place(rect.left, rect.top);
+    });
+    restore();
+  }
+
   function sessionControls(container, prefix, Studio, options) {
     const controls = document.createElement("div");
     controls.className = "agent-session-controls";
@@ -85,6 +162,7 @@ window.PhotoDreamAgent = (() => {
     launcher.title = "打开小梦 Agent";
     document.body.append(launcher);
     mountCharacterSlots(launcher);
+    makeLauncherDraggable(launcher);
 
     const dialog = document.createElement("dialog");
     dialog.id = "xiaomengDialog";
