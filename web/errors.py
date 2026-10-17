@@ -59,6 +59,15 @@ class ErrorInfo:
     retryable: bool = False
 
 
+class AgentModelError(FastAPIHTTPException):
+    """Keep chat failures distinct even when the cause is a requests timeout."""
+    def __init__(self, code, message, status=502, upstream_status=None, diagnostic=""):
+        self.info = ErrorInfo(code, message, status, True)
+        self.upstream_status = upstream_status
+        self.diagnostic = diagnostic
+        super().__init__(status, message)
+
+
 class UpstreamError(FastAPIHTTPException):
     def __init__(self, status, diagnostic=""):
         self.upstream_status = status
@@ -103,6 +112,8 @@ def describe_error(exc):
         chain.append(current)
         current = current.__cause__
     for item in chain:
+        if isinstance(item, AgentModelError):
+            return item.info
         if isinstance(item, UpstreamError):
             return item.info
         if isinstance(item, requests.exceptions.SSLError):
@@ -214,7 +225,7 @@ def diagnostics(exc):
         if current is None:
             break
         parts.append(type(current).__name__)
-        if isinstance(current, UpstreamError):
+        if isinstance(current, (UpstreamError, AgentModelError)) and current.upstream_status is not None:
             parts.append(
                 f"upstream_status={current.upstream_status}: {redact(current.diagnostic)}"
             )

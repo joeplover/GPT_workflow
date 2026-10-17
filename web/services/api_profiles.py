@@ -35,6 +35,18 @@ def profile_credentials(profile_id: str) -> tuple[str, str]:
             raise HTTPException(503, str(exc)) from None
 
 
+def selected_profile_id() -> str:
+    """Return the current user's selected image profile, if one exists."""
+    with Session(database.get_engine()) as session:
+        profile = session.scalar(
+            select(UserApiProfile.id).where(
+                UserApiProfile.user_id == require_actor().id,
+                UserApiProfile.selected.is_(True),
+            )
+        )
+        return profile or ""
+
+
 def encrypted_profile_key(profile, api_key: str) -> str:
     try:
         return encrypt_api_key(profile, api_key)

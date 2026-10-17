@@ -45,6 +45,85 @@ def browser_server(environment, monkeypatch):
         sock.close()
 
 
+def test_agent_session_controls_in_modal_and_planning(browser_server):
+    from playwright.async_api import async_playwright, expect
+
+    async def check():
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(executable_path="/usr/bin/google-chrome", args=["--no-sandbox"])
+            context = await browser.new_context()
+            await context.request.post(browser_server + "/photodream/api/auth/register",
+                data={"username": "agent_sessions", "password": "browser-password-123"})
+            page = await context.new_page()
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            await page.goto(browser_server + "/photodream/")
+            await page.locator("#xiaomengLauncher").click()
+            await expect(page.locator("#xiaomengSession option")).to_have_count(1)
+            first = await page.locator("#xiaomengSession").input_value()
+            await page.locator("#xiaomengNew").click()
+            await expect(page.locator("#xiaomengSession option")).to_have_count(2)
+            second = await page.locator("#xiaomengSession").input_value()
+            assert first != second
+            await page.locator("#xiaomengSession").select_option(first)
+            await expect(page.locator("#xiaomengNew")).to_be_enabled()
+            page.once("dialog", lambda dialog: dialog.accept())
+            await page.locator("#xiaomengDelete").click()
+            await expect(page.locator("#xiaomengSession option")).to_have_count(1)
+            await page.locator(".xiaomeng-close").click()
+            await page.goto(browser_server + "/photodream/#agent")
+            await expect(page.locator("#planningSession option")).to_have_count(1)
+            await page.locator('[data-plan-field="title"]').fill("保存的剧本规划")
+            await page.locator("#planningNew").click()
+            await expect(page.locator("#planningSession option")).to_have_count(2)
+            await page.locator("#planningSession").select_option(second)
+            await expect(page.locator('[data-plan-field="title"]')).to_have_value("保存的剧本规划")
+            page.once("dialog", lambda dialog: dialog.accept())
+            await page.locator("#planningDelete").click()
+            await expect(page.locator("#planningSession option")).to_have_count(1)
+            assert not errors
+            await browser.close()
+
+    asyncio.run(check())
+
+
+def test_agent_composer_visible_with_long_conversation_and_operation(browser_server, monkeypatch):
+    from playwright.async_api import async_playwright, expect
+    from web.services import agent
+
+    monkeypatch.setattr(agent, "_chat_decision", lambda state: {
+        "reply": "请检查这些分镜。" * 500, "focus_stage": "storyboard", "action": "tool",
+        "tool_name": "create_frames", "plan_patch": {},
+        "arguments": {"frames": [{"title": f"分镜{i}", "prompt": "雨夜街道" * 200} for i in range(10)]},
+    })
+
+    async def check():
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(executable_path="/usr/bin/google-chrome", args=["--no-sandbox"])
+            context = await browser.new_context()
+            response = await context.request.post(browser_server + "/photodream/api/auth/register",
+                data={"username": "agent_layout", "password": "browser-password-123"})
+            assert response.status == 201
+            row = await (await context.request.post(browser_server + "/photodream/api/agent/sessions", data={})).json()
+            response = await context.request.post(browser_server + f"/photodream/api/agent/sessions/{row['id']}/messages",
+                data={"content": "创建这些分镜"})
+            assert response.status == 200
+            page = await context.new_page()
+            await page.goto(browser_server + "/photodream/")
+            await page.locator("#xiaomengLauncher").click()
+            await expect(page.locator(".agent-operation")).to_be_visible()
+            for width, height in [(1440, 900), (390, 844), (375, 667), (844, 390)]:
+                await page.set_viewport_size({"width": width, "height": height})
+                button = page.locator("#xiaomengForm button[type=submit]")
+                await expect(button).to_be_visible()
+                bounds = await button.bounding_box()
+                assert bounds["y"] >= 0 and bounds["y"] + bounds["height"] <= height
+                assert await page.locator("#xiaomengMessages").evaluate("el => el.scrollHeight > el.clientHeight")
+            await browser.close()
+
+    asyncio.run(check())
+
+
 def test_named_api_profiles_settings_and_workbench_selection(browser_server):
     from playwright.async_api import async_playwright, expect
 

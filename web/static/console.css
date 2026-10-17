@@ -23,7 +23,49 @@
 @media(max-width:980px) { .planning-layout { grid-template-columns:170px minmax(280px,1fr); }.planning-editor { grid-column:1 / -1; max-height:none; }.planning-item { grid-template-columns:1fr 2fr auto; } }
 @media(max-width:620px) { .xiaomeng-launcher { right:8px; bottom:8px; width:126px; height:176px; }.xiaomeng-model-label { bottom:0; }.xiaomeng-dialog { width:calc(100vw - 16px); max-height:calc(100dvh - 16px); }.xiaomeng-head,.xiaomeng-toolbar,.xiaomeng-stages,.xiaomeng-messages,.xiaomeng-form { padding-left:16px; padding-right:16px; }.xiaomeng-portrait { width:64px; height:78px; }.xiaomeng-head h2 { font-size:21px; }.xiaomeng-plan { margin-left:16px; margin-right:16px; }.xiaomeng-actions button { flex:1; }.xiaomeng-actions button:last-child { flex-basis:100%; }.planning-head-actions { flex-wrap:wrap; }.planning-head-actions select { min-width:0; flex:1; }.planning-layout { display:block; }.planning-rail { border-right:0; border-bottom:1px solid var(--c-line); margin-bottom:18px; padding:0 0 12px; }.planning-rail > div:first-of-type { display:flex; overflow:auto; gap:5px; }.planning-stage { white-space:nowrap; border-left:0; border-bottom:2px solid transparent; }.planning-stage.active { border-bottom-color:var(--c-green); }.planning-mode { display:flex; gap:8px; align-items:end; }.planning-mode label { flex:1; }.planning-mode button { width:auto; margin:0; }.planning-chat { min-height:520px; }.planning-editor { margin-top:18px; }.planning-item { grid-template-columns:1fr auto; }.planning-item textarea { grid-column:1 / -1; }.planning-chat-actions { align-items:flex-end; }.planning-chat-actions .muted { display:none; } }
 * { box-sizing:border-box; }
+
+/* Keep the agent conversation scrollable while the composer stays visible. */
+.console-body dialog.xiaomeng-dialog { width:min(620px,calc(100vw - 28px)); height:min(820px,calc(100dvh - 28px)); max-height:calc(100dvh - 28px); min-height:0; padding:0; overflow:hidden; }
+/* The workbench keeps its bottom-right action bar clear of the floating agent. */
+.console-body:has(#workspaceMain) .xiaomeng-launcher { right:20px; bottom:230px; }
+.xiaomeng-dialog:not([open]) { display:none; }
+.xiaomeng-dialog[open] { display:grid; grid-template-rows:auto auto auto minmax(0,1fr) auto auto; }
+.xiaomeng-messages { min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain; align-content:start; }
+.xiaomeng-plan { min-height:0; max-height:180px; overflow:auto; }
+.agent-operation { padding:10px 0; overflow-wrap:anywhere; }
+.agent-operation p { white-space:pre-wrap; font-size:12px; margin:6px 0; }
+.xiaomeng-plan .agent-operation p { max-height:none; overflow:visible; }
+.agent-operation b { color:var(--c-muted); }
+.xiaomeng-form { min-height:0; }
+.xiaomeng-form textarea { min-height:56px; max-height:110px; resize:none; }
+.xiaomeng-actions button { flex:0 0 auto; }
+.planning-chat { height:min(650px,calc(100dvh - 220px)); min-height:0; }
+.planning-messages { min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain; }
+.planning-chat form { flex:none; }
+.planning-chat textarea { min-height:88px; }
+@media(max-height:680px), (max-width:620px) {
+  .console-body:has(#workspaceMain) .xiaomeng-launcher { right:8px; bottom:190px; }
+  .xiaomeng-head { padding:10px 16px; }
+  .xiaomeng-head .xiaomeng-portrait,.xiaomeng-head p,.xiaomeng-sheet-link,.xiaomeng-head .eyebrow { display:none; }
+  .xiaomeng-head h2 { margin:0!important; font-size:20px; }
+  .xiaomeng-toolbar { padding:8px 16px; }
+  .xiaomeng-stages { padding:5px 16px; }
+  .xiaomeng-plan { max-height:48px; margin:4px 16px; padding:6px 10px; }
+  .xiaomeng-plan > p,.xiaomeng-plan-grid { display:none; }
+  .xiaomeng-plan:has(.agent-operation) { max-height:100px; }
+  .xiaomeng-form { padding:8px 16px max(10px,env(safe-area-inset-bottom)); }
+  .xiaomeng-actions { flex-wrap:nowrap; }
+  .xiaomeng-actions button:last-child { flex-basis:auto; }
+}
 [hidden] { display:none !important; }
+@media(max-height:480px) {
+  .xiaomeng-dialog[open] { grid-template-rows:auto auto 0 minmax(40px,1fr) minmax(0,64px) auto; }
+  .xiaomeng-stages { visibility:hidden; padding:0; min-height:0; }
+  .xiaomeng-form textarea { height:48px; min-height:48px; }
+  .xiaomeng-toolbar { padding-top:4px; padding-bottom:4px; }
+  .xiaomeng-actions { margin-top:4px; }
+  .xiaomeng-form { padding-top:4px; padding-bottom:6px; }
+}
 .api-profile-settings { max-width:1000px; margin-top:20px; min-width:0; }
 .console-body .system-error-dialog { width:min(480px,calc(100vw - 32px)); max-height:85dvh; overflow:auto; padding:24px; }
 .error-heading { display:flex; align-items:center; gap:12px; }.console-body .error-heading h2 { margin:0; font-size:20px; }
@@ -87,3 +129,10 @@
 .account-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:1000px; }.login-page { min-height:100vh; display:grid; grid-template-columns:1fr 1fr; }.login-art { background:radial-gradient(ellipse at 30% 35%,#304b3a,transparent 65%),#141d17; border-right:1px solid var(--c-line); padding:60px; display:flex; flex-direction:column; justify-content:space-between; }.login-art h1 { font-size:clamp(32px,4vw,62px); line-height:1.25; font-weight:500; letter-spacing:-2px; }.login-art p { color:var(--c-muted); max-width:430px; font-size:16px; }.login-form-wrap { display:flex; align-items:center; justify-content:center; padding:35px; }.login-box { max-width:380px; width:100%; }.login-box h2 { font-size:28px; margin:10px 0; }.login-box>p { color:var(--c-muted); margin-bottom:30px; }.login-box .primary { width:100%; }.login-tabs { display:flex; gap:10px; margin-bottom:26px; }.login-tabs button { flex:1; }.login-tabs button.active { color:var(--c-green); border-color:#8ab698; }
 @media(max-width:1100px) { .studio-nav { gap:15px; padding:12px 16px; flex-wrap:wrap; }.studio-links { order:3; flex-basis:100%; }.studio-account { margin-left:auto; }.console-main { padding:25px; }.project-grid,.resource-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.console-layout { grid-template-columns:170px minmax(0,1fr); } }
 @media(max-width:700px) { .console-layout { display:block; }.console-side { display:none; }.console-main { padding:22px 16px; }.stats { grid-template-columns:repeat(2,1fr); }.quick-grid,.project-grid,.resource-grid,.team-layout,.account-grid { grid-template-columns:1fr; }.page-head { align-items:flex-start; }.page-head h1 { font-size:24px; }.studio-links { gap:1px; }.studio-links a { padding:6px 8px; font-size:12px; }.login-page { display:block; }.login-art { padding:28px; border-right:0; }.login-art h1 { font-size:32px; margin:20px 0; }.login-art .login-foot { display:none; }.login-form-wrap { padding:28px; }.c-panel { padding:18px; } }
+.agent-session-controls { display:flex; align-items:center; gap:6px; min-width:0; }
+.agent-session-controls select { min-width:0; width:180px; flex:1; text-overflow:ellipsis; }
+.agent-session-controls button { white-space:nowrap; }
+.xiaomeng-toolbar { flex-wrap:wrap; }
+.xiaomeng-toolbar .agent-session-controls { flex-basis:100%; }
+.planning-head-actions { flex-wrap:wrap; }
+@media(max-width:620px) { .planning-head-actions .agent-session-controls { flex-basis:100%; } .agent-session-controls button { padding:7px 8px; font-size:12px; } }
