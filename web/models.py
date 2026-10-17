@@ -23,7 +23,10 @@ class Project(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), index=True
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        index=True,
     )
 
 
@@ -54,6 +57,32 @@ class ExceptionRecord(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class AgentSession(Base):
+    """Persistent Xiao Meng planning sessions, isolated by user."""
+
+    __tablename__ = "agent_sessions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, index=True)
+    project_id: Mapped[str | None] = mapped_column(String, index=True)
+    mode: Mapped[str] = mapped_column(String, default="guided")
+    stage: Mapped[str] = mapped_column(String, default="brief")
+    status: Mapped[str] = mapped_column(String, default="active", index=True)
+    api_profile_id: Mapped[str] = mapped_column(String, default="")
+    plan: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    messages: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    job: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        index=True,
     )
 
 
@@ -142,6 +171,27 @@ class UserApiProfile(Base):
     selected: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class UserAgentConfig(Base):
+    """Private Xiao Meng Agent endpoint and model configuration per user."""
+
+    __tablename__ = "user_agent_configs"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    base_url: Mapped[str] = mapped_column(String(2048))
+    api_key: Mapped[str] = mapped_column(String)
+    model: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
 

@@ -178,7 +178,7 @@ def test_console_registration_projects_teams_resources_and_workbenches(browser_s
             await page.locator("#authSubmit").click()
             await expect(page.locator(".page-head h1")).to_have_text("你好，导演 Alice")
             await expect(page.locator("#adminMenu")).to_be_hidden()
-            await expect(page.locator(".studio-links a")).to_have_count(6)
+            await expect(page.locator(".studio-links a")).to_have_count(7)
             await page.locator('[data-action="new-project"]').click()
             await page.locator('#dialogForm [name="name"]').fill("雨夜来信")
             await page.locator('#dialogForm [name="synopsis"]').fill(

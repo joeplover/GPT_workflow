@@ -16,6 +16,8 @@ from .database import dispose_database, initialize_database
 from .errors import error_context, error_response, install_exception_handlers
 from .routers import (
     api_profiles,
+    agent_settings,
+    agent,
     exceptions,
     assets,
     auth,
@@ -105,7 +107,7 @@ def create_app() -> FastAPI:
             CORSMiddleware,
             allow_origins=origins,
             allow_credentials="*" not in origins,
-            allow_methods=["GET", "POST", "DELETE"],
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
             allow_headers=["*"],
         )
     application.include_router(system.router)
@@ -114,6 +116,8 @@ def create_app() -> FastAPI:
     application.include_router(frames.router)
     application.include_router(auth.router)
     application.include_router(api_profiles.router)
+    application.include_router(agent_settings.router)
+    application.include_router(agent.router)
     application.include_router(exceptions.router)
     application.include_router(management.router)
     application.include_router(journal.router)

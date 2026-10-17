@@ -84,9 +84,10 @@ window.Studio = (() => {
   const ready = api("/photodream/api/auth/me").then(me => {
     user = me; document.documentElement.dataset.userId = me.id;
     const bar = document.createElement("nav"); bar.className = "studio-nav"; bar.setAttribute("aria-label","系统导航");
-    bar.innerHTML = `<a class="studio-logo" href="/photodream/">▥ <strong>Photo Dream</strong><span>创作中台</span></a><div class="studio-links"><a href="/photodream/#overview">总览</a><a href="/photodream/#projects">项目管理</a><a href="/photodream/single">单图工作台</a><a href="/photodream/storyboard">分镜工作台</a><a href="/photodream/#resources">资源中心</a><a href="/photodream/#teams">团队</a></div><div class="studio-account"><a href="/photodream/#account">${escape(me.display_name)}</a><button id="studioLogout" type="button">退出</button></div>`;
+    bar.innerHTML = `<a class="studio-logo" href="/photodream/">▥ <strong>Photo Dream</strong><span>创作中台</span></a><div class="studio-links"><a href="/photodream/#overview">总览</a><a href="/photodream/#projects">项目管理</a><a href="/photodream/#agent">创作规划</a><a href="/photodream/single">单图工作台</a><a href="/photodream/storyboard">分镜工作台</a><a href="/photodream/#resources">资源中心</a><a href="/photodream/#teams">团队</a></div><div class="studio-account"><a href="/photodream/#account">${escape(me.display_name)}</a><button id="studioLogout" type="button">退出</button></div>`;
     if (me.is_admin) { for (const [name, label] of [["users", "用户管理"], ["exceptions", "异常管理"]]) { const a = document.createElement("a"); a.href=`/photodream/#${name}`; a.textContent=label; bar.querySelector(".studio-links").append(a); } }
     document.body.prepend(bar);
+    if (window.PhotoDreamAgent) setTimeout(() => window.PhotoDreamAgent.mount(window.Studio), 0);
     new ResizeObserver(() => document.documentElement.style.setProperty("--studio-nav-height",`${bar.offsetHeight}px`)).observe(bar);
     bar.querySelector("#studioLogout").addEventListener("click",async () => {
       if (!confirm("确认退出登录？请先确认当前草稿已同步。")) return;

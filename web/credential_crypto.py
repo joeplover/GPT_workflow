@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import select
 
 from . import config
-from .models import UserApiProfile
+from .models import UserAgentConfig, UserApiProfile
 
 CIPHERTEXT_PREFIX = "pdenc:v1:"
 
@@ -112,6 +112,10 @@ def initialize_api_key_encryption(session) -> None:
             select(UserApiProfile.id)
             .where(UserApiProfile.api_key.startswith(CIPHERTEXT_PREFIX))
             .limit(1)
+        ) or session.scalar(
+            select(UserAgentConfig.id)
+            .where(UserAgentConfig.api_key.startswith(CIPHERTEXT_PREFIX))
+            .limit(1)
         )
         if encrypted:
             raise CredentialEncryptionError(
@@ -122,6 +126,13 @@ def initialize_api_key_encryption(session) -> None:
     for profile in session.scalars(select(UserApiProfile).with_for_update()).yield_per(
         100
     ):
+        if profile.api_key.startswith(CIPHERTEXT_PREFIX):
+            decrypt_api_key(profile, cipher)
+        else:
+            profile.api_key = encrypt_api_key(profile, profile.api_key, cipher)
+    for profile in session.scalars(
+        select(UserAgentConfig).with_for_update()
+    ).yield_per(100):
         if profile.api_key.startswith(CIPHERTEXT_PREFIX):
             decrypt_api_key(profile, cipher)
         else:

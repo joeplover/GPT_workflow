@@ -91,6 +91,11 @@
     $("consoleView").append(section);
     const module = await import("/photodream/static/api-profiles.js");
     if (section.isConnected) await module.mountSettings(section, Studio);
+    if (!section.isConnected) return;
+    const agentSection = document.createElement("section"); agentSection.className = "c-panel api-profile-settings agent-settings"; agentSection.id = "agentSettingsSection";
+    $("consoleView").append(agentSection);
+    const agentModule = await import("/photodream/static/agent-settings.js");
+    if (agentSection.isConnected) await agentModule.mountSettings(agentSection, Studio);
   }
   async function usersPage() {
     if (!Studio.user.is_admin) { location.hash = "overview"; return; }
@@ -102,6 +107,11 @@
     $("consoleView").innerHTML = heading("异常管理", "查询错误原因和脱敏诊断详情，处理后标记状态。") + '<div id="exceptionRoot"></div>';
     const root = $("exceptionRoot"), module = await import("/photodream/static/exceptions.js");
     if (root.isConnected && view() === "exceptions") await module.mount(root, Studio);
+  }
+  async function agentPage() {
+    $("consoleView").innerHTML = '<div id="agentPageRoot"></div>';
+    const root = $("agentPageRoot");
+    if (root.isConnected && view() === "agent") await window.PhotoDreamAgent.mountPage(root, Studio);
   }
   async function render() {
     const version = ++renderVersion, name = view(), isWorkbench = ["single","storyboard"].includes(name);
@@ -116,7 +126,7 @@
     $("workspaceMain").classList.toggle("workbench-main",isWorkbench);
     $("workbenchLoading").hidden = !isWorkbench; $("workbenchRetry").hidden = true;
     $("workbenchLoading").querySelector("span:last-of-type").textContent = "正在准备工作台…";
-    document.title = `${({single:"单图工作台",storyboard:"分镜工作台",projects:"项目管理",resources:"资源中心",generations:"生成日志",teams:"团队空间",account:"账号设置",users:"用户管理",exceptions:"异常管理"})[name] || "创作中台"} · Photo Dream`;
+    document.title = `${({single:"单图工作台",storyboard:"分镜工作台",agent:"创作规划",projects:"项目管理",resources:"资源中心",generations:"生成日志",teams:"团队空间",account:"账号设置",users:"用户管理",exceptions:"异常管理"})[name] || "创作中台"} · Photo Dream`;
     if (isWorkbench) {
       const projectId = new URL(location.href).searchParams.get("project") || Studio.projectId;
       try {
@@ -137,7 +147,7 @@
     }
     if (!initialized || wasWorkbench) await refresh();
     if (version !== renderVersion) return;
-    await ({overview,projects:projectsPage,resources:resourcesPage,generations:generationsPage,teams:teamsPage,account:accountPage,users:usersPage,exceptions:exceptionsPage}[name] || overview)();
+    await ({overview,projects:projectsPage,agent:agentPage,resources:resourcesPage,generations:generationsPage,teams:teamsPage,account:accountPage,users:usersPage,exceptions:exceptionsPage}[name] || overview)();
     if (version === renderVersion) $("workspaceMain").scrollTop = scrollPositions.get(name) || 0;
   }
   function newProject(team = "") {
